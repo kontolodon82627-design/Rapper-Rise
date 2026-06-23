@@ -158,6 +158,7 @@ export function UpcomingReleaseView({ release, onClose, onArtistClick, gameState
           </div>
        </div>
 
+
        {/* Tracklist Preview */}
        <div className="relative z-10 w-full max-w-2xl mx-auto px-6 pb-24 text-left">
           <h2 className="text-xl font-black text-white mb-6 border-b border-white/10 pb-4">Tracklist Preview</h2>
@@ -166,7 +167,7 @@ export function UpcomingReleaseView({ release, onClose, onArtistClick, gameState
                 <div key={t.id} className="flex items-center gap-4 p-4 rounded-xl hover:bg-white/5 transition-colors group">
                    <span className="text-white/30 font-bold w-6 text-right tabular-nums">{i + 1}</span>
                    <div className="flex flex-col min-w-0">
-                      <span className={"text-base font-bold truncate " + (t.isHidden || !t.isAnnounced ? "text-white/40 italic" : "text-white")}>
+                      <span className={`text-base font-bold truncate ${t.isHidden || !t.isAnnounced ? "text-white/40 italic" : "text-white"}`}>
                          {t.title}
                       </span>
                       {(!t.isHidden && t.isAnnounced) && (

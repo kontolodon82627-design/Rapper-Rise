@@ -1,6 +1,6 @@
 export type GameScreen = 'loading' | 'home' | 'saves' | 'create' | 'dashboard' | 'studio' | 'discography' | 'skills' | 'regions' | 'gigs' | 'platforms' | 'charts' | 'x' | 'google' | 'settings' | 'youtube' | 'plaques' | 'grammys' | 'merch' | 'wrapped' | 'tour' | 'tiktok' | 'labels';
 
-export type AwardCategory = 'Artist of the Year' | 'Song of the Year' | 'Album of the Year' | 'Record of the Year' | 'Best Pop Album' | 'Best Pop Duo/Group Performance' | 'Best Country Album' | 'Best Rap Album';
+export type AwardCategory = 'Artist of the Year' | 'Song of the Year' | 'Album of the Year' | 'Record of the Year' | 'Best Pop Solo Performance' | 'Best Pop Duo/Group Performance' | 'Best Pop Album' | 'Best K-Pop Performance' | 'Best Rap Song' | 'Best Rap Album' | 'Best Country Song' | 'Best Country Album';
 
 export interface GrammysNominee {
   id: string; // release ID or artist name for AOTY
@@ -9,6 +9,7 @@ export interface GrammysNominee {
   isPlayer: boolean;
   type: 'Single' | 'Album' | 'Artist';
   coverImage?: string | null;
+  clipQuery?: string;
 }
 
 export interface GrammysCategoryResult {
@@ -21,6 +22,7 @@ export interface GrammysHistoricalNomination {
   category: AwardCategory;
   nominee: GrammysNominee;
   won: boolean;
+  isHiddenFromPlayerHistory?: boolean;
 }
 
 export interface GrammysYearHistory {
@@ -31,6 +33,7 @@ export interface GrammysYearHistory {
 export interface GrammySubmission {
   category: AwardCategory;
   workId: string;
+  clipQuery?: string;
 }
 
 export interface GrammysState {
@@ -56,6 +59,7 @@ export interface Video {
   type: 'MusicVideo';
   publishDate: string; // ISO string of game date
   views: number;
+  lastDailyViews?: number;
   budget: number;
   thumbnail?: string;
 }
@@ -63,7 +67,7 @@ export interface Video {
 export interface BaseRelease {
   id: string;
   title: string;
-  coverImage: string;
+  coverImage: string; collaborator?: string; isNPCCollab?: boolean;
   artistId?: string; // If undefined, belongs to player
   isNPCRelease?: boolean;
   type: ReleaseType;
@@ -84,7 +88,7 @@ export interface BaseRelease {
   lastWeekSales?: number;
   currentWeekRadio?: number;
   lastWeekRadio?: number;
-  trend?: 'Flop' | 'Non-Hit' | 'TikTok Trend' | 'Hit' | 'Mega Hit';
+  trend?: 'Flop' | 'Non-Hit' | 'Non-Hit Medium' | 'Non-Hit Big' | 'TikTok Trend' | 'Hit' | 'Hit Medium' | 'Hit Big' | 'Mega Hit' | 'Mega Hit Medium' | 'Mega Hit Big';
   streams: {
     spotify: number;
     appleMusic: number;
@@ -115,11 +119,13 @@ export interface BaseRelease {
 
 export interface Song extends BaseRelease {
   type: 'Single';
-  genre: Genre;
+  genre?: Genre;
   collaborator: string;
   featuredArtistCost?: number;
   qualityModifier: number; // Impacted by hired staff
   isBSide?: boolean;
+  albumTrackNumber?: number;
+  isSleeperHit?: boolean;
   isNPCCollab?: boolean;
 }
 
@@ -155,7 +161,7 @@ export interface ScheduledTrack {
   isHidden: boolean;
   singleReleaseDate?: string;
   duration: number;
-  genre: Genre;
+  genre?: Genre;
   qualityScore: number;
 }
 
@@ -164,7 +170,7 @@ export interface ReleaseSchedule {
   artistId: string; // artistName for NPCs
   releaseTitle: string;
   releaseType: 'Album' | 'Single' | 'EP' | 'Deluxe Album';
-  coverImage: string;
+  coverImage: string; collaborator?: string; isNPCCollab?: boolean;
   bannerImage: string;
   releaseDate: string;
   announcementDate: string;
@@ -300,6 +306,17 @@ export interface GameState {
   tikTok?: TikTokProfile;
   isGodMode?: boolean;
   emails?: Email[];
+  news?: NewsArticle[];
+}
+
+export interface NewsArticle {
+  id: string;
+  dateStr: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  type: 'general' | 'scandal' | 'achievement' | 'review' | 'grammy';
+  artistName?: string;
 }
 
 export interface Email {
@@ -315,7 +332,7 @@ export interface Email {
     coverArt: string;
     fee: number;
     status: 'pending' | 'accepted' | 'rejected';
-    genre: Genre;
+    genre?: Genre;
   };
   contractOffer?: Partial<RecordLabelContract> & { 
     labelId: string;
@@ -411,7 +428,7 @@ export interface TikTokPost {
   rewatchRate: number;
 }
 
-export type TikTokTrendingStatus = 'Non Trend' | 'TikTok Trend' | 'Hits' | 'Mega Hits';
+export type TikTokTrendingStatus = 'Non Trend' | 'Non Trend Medium' | 'Non Trend Big' | 'TikTok Trend' | 'Hits' | 'Hits Medium' | 'Hits Big' | 'Mega Hits' | 'Mega Hits Medium' | 'Mega Hits Big';
 
 export interface TikTokSoundCampaign {
   active: boolean;

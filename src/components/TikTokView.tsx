@@ -674,7 +674,7 @@ export function TikTokView({ gameState, setGameState, onClose }: TikTokViewProps
                                     </div>
                                </div>
                                
-                               {gameState.releases.filter(r => r.type === 'Single' && !(r as any).isNPCRelease).slice(0,20).map(song => (
+                               {gameState.releases.filter(r => r.type === 'Single' && !(r as any).isNPCRelease).map(song => (
                                     <div 
                                         key={song.id}
                                         className={`flex items-center gap-3 p-4 cursor-pointer transition-colors border-b border-gray-100 ${selectedSongId === song.id ? 'bg-[#20D5EC]/10' : 'hover:bg-gray-50'}`}

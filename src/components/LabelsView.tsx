@@ -82,7 +82,7 @@ export function LabelsView({ gameState, setGameState, onClose }: LabelsViewProps
   const topArtists = useMemo(() => {
       if (!currentLabel) return [];
       const labelName = currentLabel.name;
-      const labelNpcs = NPC_ARTISTS.filter(a => RECORD_LABELS.find(l => l.name === labelName)?.artists.includes(a.name));
+      const labelNpcs = NPC_ARTISTS.filter(a => RECORD_LABELS.find(l => l.name === labelName)?.artists.includes(a.name)).filter(a => !gameState.artist?.name || a.name.toLowerCase() !== gameState.artist.name.toLowerCase());
       
       const augmentedNpcs = labelNpcs.map(npc => {
           // Deterministic pseudo-random based on npc name length to avoid changing on render

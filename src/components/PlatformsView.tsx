@@ -134,8 +134,8 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
     // Logarithmic scale for legacy catalog to prevent massive accumulation over years from giving bloated ML
     const legacyListeners = totalPlatStreams > 0 ? (Math.pow(totalPlatStreams, 0.65) * 0.8) : 0; 
     
-    // Add real-world variance based on total listeners (not everyone listens actively)
-    let rawListeners = Math.floor((activeListeners + legacyListeners) * (Math.random() * 0.05 + 0.95)) || 0;
+    // Calculate raw listeners without Math.random to avoid wild recalculations on re-renders
+    let rawListeners = Math.floor(activeListeners + legacyListeners) || 0;
     
     if (targetArtistName && gameState.npcStats?.[targetArtistName]) {
        rawListeners += (gameState.npcStats[targetArtistName].listeners * (platMux[plat] / 0.4));
@@ -172,7 +172,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
 
   const allArtistsListeners = [
       { name: gameState.artist.name, image: gameState.artist.image, listeners: calculateListeners('spotify'), isPlayer: true },
-      ...NPC_ARTISTS.map(npc => ({
+      ...NPC_ARTISTS.filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()).map(npc => ({
          name: npc.name,
          image: ARTIST_PICS[npc.name] || ARTIST_IMAGES[npc.name] || null,
          listeners: calculateListeners('spotify', npc.name),
@@ -181,7 +181,8 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
   ].sort((a,b) => b.listeners - a.listeners).map((x, i) => ({...x, rank: i+1}));
 
   const top10 = allArtistsListeners.slice(0, 10);
-  const randNpc = () => NPC_ARTISTS[Math.floor(Math.random() * Math.min(NPC_ARTISTS.length, 10))];
+  const activeNPCs = NPC_ARTISTS.filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase());
+  const randNpc = () => activeNPCs[Math.floor(Math.random() * Math.min(activeNPCs.length, 10))];
   const getImg = (name: string) => name === gameState.artist.name ? (gameState.artist.image || undefined) : (ARTIST_PICS[name] || ARTIST_IMAGES[name] || undefined);
   
   const COVER_IMAGES = [
@@ -205,7 +206,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
       
       let allNpcSongs = gameState.releases.filter(r => r.status === 'Published' && (r as any).isNPCRelease && r.type === 'Single');
       if (allNpcSongs.length === 0) {
-          allNpcSongs = NPC_ARTISTS.map(a => ({ title: `${a.name} Hit`, artistId: a.name, type: 'Single', status: 'Published', isNPCRelease: true } as any));
+          allNpcSongs = activeNPCs.map(a => ({ title: `${a.name} Hit`, artistId: a.name, type: 'Single', status: 'Published', isNPCRelease: true } as any));
       }
 
       const npcHits = allNpcSongs.map((r, idx) => ({
@@ -393,10 +394,10 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Top Monthly Listeners</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Top Monthly Listeners</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                            {top10.map((a, i) => (
-                              <div key={a.name} className="flex flex-col items-center gap-2 cursor-pointer w-[120px] shrink-0" onClick={() => {
+                              <div key={a.name} className="flex flex-col items-center gap-4 cursor-pointer group min-w-[150px] max-w-[150px]" onClick={() => {
                                  if(a.isPlayer) {
                                     setSpotifyViewArtist(null);
                                     setSpotifyTab('profile');
@@ -405,15 +406,19 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                                     setSpotifyTab('profile');
                                  }
                               }}>
-                                 <div className="w-[110px] h-[110px] rounded-full overflow-hidden bg-[#282828] relative shadow-xl">
-                                    {a.image ? <img src={a.image} className="w-full h-full object-cover"/> : <User className="w-10 h-10 text-white/20 m-auto mt-7"/>}
-                                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur text-white text-[10px] font-black px-2 py-0.5 rounded flex items-center justify-center border border-white/10 w-8">
-                                       {a.rank}
+                                 <div className="w-full aspect-square rounded-full overflow-hidden bg-[#282828] relative shadow-xl">
+                                    {a.image ? <img src={a.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/> : <User className="w-10 h-10 text-white/20 m-auto mt-10"/>}
+                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur text-white text-[11px] font-black px-2 py-0.5 rounded flex items-center justify-center border border-white/10 shadow-lg">
+                                       #{a.rank}
+                                    </div>
+                                    <div className="absolute bottom-2 right-2 w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                        <Play className="w-6 h-6 text-black fill-current ml-1" />
                                     </div>
                                  </div>
-                                 <div className="flex flex-col items-center w-full mt-1">
-                                     <span className="text-white text-[13.5px] font-bold text-center truncate w-full hover:underline">{a.name}</span>
-                                     <span className="text-white/60 text-[12px] truncate w-full text-center">{(a.listeners / 1000000).toFixed(1)}M listeners</span>
+                                 <div className="flex flex-col items-center w-full">
+                                     <span className="text-white text-[15px] font-bold text-center truncate w-full group-hover:underline">{a.name}</span>
+                                     <span className="text-[#a7a7a7] text-[13px] truncate w-full text-center">{(a.listeners / 1000000).toFixed(1)}M listeners</span>
                                  </div>
                               </div>
                            ))}
@@ -421,83 +426,89 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Recommended Stations</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Recommended for today</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                             {[
                                { id: 'r1', type: 'Radio', artist: heroArtist, related: 'Olivia Rodrigo, Sabrina Carpenter, ' + randNpc().name, bg: '#FDE047' },
                                { id: 'r2', type: 'Radio', artist: top10[1]?.name || randNpc().name, related: 'LE SSERAFIM, aespa, NewJeans', bg: '#86EFAC' },
                                { id: 'r3', type: 'Radio', artist: top10[2]?.name || randNpc().name, related: 'The Weeknd, Bruno Mars', bg: '#F9A8D4' },
-                               { id: 'r4', type: 'Radio', artist: top10[3]?.name || randNpc().name, related: 'Billie Eilish, Conan Gray', bg: '#93C5FD' }
+                               { id: 'r4', type: 'Radio', artist: top10[3]?.name || randNpc().name, related: 'Billie Eilish, Conan Gray', bg: '#93C5FD' },
+                               { id: 'r5', type: 'Radio', artist: top10[4]?.name || randNpc().name, related: 'Kendrick Lamar, J. Cole', bg: '#C4B5FD' },
+                               { id: 'r6', type: 'Radio', artist: top10[5]?.name || randNpc().name, related: 'Ariana Grande, Dua Lipa', bg: '#FCA5A5' }
                            ].map(r => {
                               const img1 = getImg(r.artist);
                               const img2 = getImg(r.artist !== heroArtist ? heroArtist : top10[1]?.name || randNpc().name);
                               const img3 = getImg(top10[2]?.name || randNpc().name);
                               return (
-                              <div key={r.id} onClick={() => setSelectedPlaylist({ ...r, imgs: [img1, img2, img3, img2] })} className="min-w-[160px] max-w-[160px] cursor-pointer group">
-                                 <div className="aspect-square rounded-md p-4 flex flex-col justify-between relative overflow-hidden" style={{ backgroundColor: r.bg }}>
+                              <div key={r.id} onClick={() => setSelectedPlaylist({ ...r, imgs: [img1, img2, img3, img2] })} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                 <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828]">
+                                     <div className="absolute inset-0 bg-gradient-to-br" style={{ backgroundImage: `linear-gradient(to bottom right, ${r.bg}, #121212)` }} />
                                      <h3 className="font-black text-black z-20 text-[10px] tracking-widest text-right absolute top-3 right-3 opacity-80">RADIO</h3>
                                      
-                                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] flex items-center justify-center w-[120%]">
+                                     <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
                                         {/* Collage of circles */}
-                                        <div className="w-[50px] h-[50px] rounded-full overflow-hidden absolute left-2 top-2 shadow-2xl z-20 border-2 border-[color:var(--bg)]" style={{ borderColor: r.bg }}>
-                                            {(img2) ? <img src={img2} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-black/20" />}
-                                        </div>
-                                        <div className="w-[85px] h-[85px] rounded-full overflow-hidden absolute left-1/2 -translate-x-1/2 z-30 shadow-2xl border-2 border-[color:var(--bg)]" style={{ borderColor: r.bg }}>
-                                            {(img1) ? <img src={img1} className="w-full h-full object-cover scale-110" /> : <div className="w-full h-full bg-black/20" />}
-                                        </div>
-                                        <div className="w-[50px] h-[50px] rounded-full overflow-hidden absolute right-2 top-2 shadow-2xl z-10 border-2 border-[color:var(--bg)]" style={{ borderColor: r.bg }}>
-                                            {(img3) ? <img src={img3} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-black/20" />}
+                                        <div className="flex -space-x-4">
+                                            <div className="w-12 h-12 rounded-full overflow-hidden shadow-xl z-10 border-2" style={{ borderColor: r.bg }}>
+                                                {(img2) ? <img src={img2} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-black/20" />}
+                                            </div>
+                                            <div className="w-16 h-16 rounded-full overflow-hidden z-20 shadow-2xl border-2" style={{ borderColor: r.bg }}>
+                                                {(img1) ? <img src={img1} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-black/20" />}
+                                            </div>
+                                            <div className="w-12 h-12 rounded-full overflow-hidden shadow-xl z-10 border-2" style={{ borderColor: r.bg }}>
+                                                {(img3) ? <img src={img3} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-black/20" />}
+                                            </div>
                                         </div>
                                      </div>
 
-                                     <h3 className="font-black text-[22px] tracking-tight leading-tight text-black mt-auto z-20 relative mix-blend-multiply">{r.artist}</h3>
-                                     <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                     <h3 className="font-black text-[22px] tracking-tight leading-tight text-white mt-auto z-20 absolute bottom-3 left-3">{r.artist}</h3>
+                                     <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
                                          <Play className="w-5 h-5 text-black fill-current ml-1" />
                                      </div>
                                  </div>
-                                 <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.artist}, {r.related}</p>
+                                 <div className="font-bold text-white text-[15px] truncate mb-1">{r.artist} Radio</div>
+                                 <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">With {r.related}</div>
                               </div>
                            )})}
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Your Top Mixes</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Your Top Mixes</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                            {[
-                             { id: 'm1', type: 'Mix', title: 'Happy Mix', artists: 'Taylor Swift, Kesha, Sabrina Carpenter and more', bg: '#D8B4E2', img: getCover(0), imgs: [getCover(0), getCover(1), getCover(2), getCover(3)] },
-                             { id: 'm2', type: 'Mix', title: heroArtist + ' Mix', artists: `LISA, BLACKPINK and ROSÉ`, bg: '#FDE047', img: heroImg, imgs: [heroImg, getCover(4), getCover(5), getCover(6)] },
-                             { id: 'm3', type: 'Mix', title: 'Pop Mix', artists: 'Ariana Grande, Justin Bieber and more', bg: '#71A0B6', img: getCover(1), imgs: [getCover(1), getCover(7), getCover(8), getCover(9)] },
-                             { id: 'm4', type: 'Mix', title: 'Chill Mix', artists: 'Billie Eilish, Joji, Labrinth', bg: '#8B5CF6', img: getCover(2), imgs: [getCover(2), getCover(10), getCover(11), getCover(0)] }
+                             { id: 'm1', type: 'Mix', title: 'Happy Mix', artists: 'Taylor Swift, Kesha, Sabrina Carpenter and more', bgimg: getImg(top10[0]?.name || randNpc().name) },
+                             { id: 'm2', type: 'Mix', title: heroArtist + ' Mix', artists: `LISA, BLACKPINK and ROSÉ`, bgimg: heroImg },
+                             { id: 'm3', type: 'Mix', title: 'Pop Mix', artists: 'Ariana Grande, Justin Bieber and more', bgimg: getImg(top10[1]?.name || randNpc().name) },
+                             { id: 'm4', type: 'Mix', title: 'Chill Mix', artists: 'Billie Eilish, Joji, Labrinth', bgimg: getImg(top10[3]?.name || randNpc().name) },
+                             { id: 'm5', type: 'Mix', title: 'Acoustic Mix', artists: 'Ed Sheeran, Shawn Mendes, Jason Mraz', bgimg: getImg(top10[4]?.name || randNpc().name) },
+                             { id: 'm6', type: 'Mix', title: 'Hip Hop Mix', artists: 'Drake, Kendrick Lamar, J. Cole', bgimg: getImg(top10[5]?.name || randNpc().name) }
                            ].map(r => (
-                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md flex flex-col justify-end relative overflow-hidden bg-[#282828]">
-                                    {r.img ? <img src={r.img} className="absolute inset-0 w-full h-full object-cover" /> : null}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                                    
-                                    <div className="relative z-20 flex px-2 mb-3">
-                                       <div className="w-1.5 h-[22px] shrink-0 mr-1.5 bg-white" style={{ backgroundColor: r.bg }} />
-                                       <span className="bg-white/90 px-1 text-[13px] font-black text-black leading-tight tracking-tight shadow-md py-0.5">{r.title}</span>
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.title}</h3>
                                     </div>
-
-                                    <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
                                         <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.artists}</p>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.title}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.artists}</div>
                              </div>
                            ))}
                         </div>
                     </div>
 
                     <div>
-                        <div className="flex items-center gap-3 px-2 mb-4">
-                           <div className="w-10 h-10 rounded-full overflow-hidden">
+                        <div className="flex items-center gap-3 px-2 mb-6">
+                           <div className="w-12 h-12 rounded-full overflow-hidden border border-white/20">
                                {heroImg ? <img src={heroImg} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-[#282828]" />}
                            </div>
                            <div className="flex flex-col">
-                               <span className="text-white/50 text-[12px] uppercase tracking-widest font-bold">For fans of</span>
-                               <span className="text-[22px] font-black leading-none">{heroArtist}</span>
+                               <span className="text-[#a7a7a7] text-[12px] uppercase tracking-widest font-bold">More like</span>
+                               <span className="text-[22px] font-black leading-none hover:underline cursor-pointer">{heroArtist}</span>
                            </div>
                         </div>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
@@ -505,145 +516,110 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                              { id: 'f1', type: 'This Is', artist: heroArtist, text: `Listen to ${heroArtist}'s greatest hits, all in one place.`, bg: '#06B6D4', img: heroImg },
                              { id: 'f2', type: 'Best Of', artist: top10[1]?.name || randNpc().name, text: 'Essential tracks.', bg: '#F59E0B', img: getImg(top10[1]?.name || randNpc().name) },
                              { id: 'f3', type: 'This Is', artist: top10[2]?.name || randNpc().name, text: 'This is their best work.', bg: '#3B82F6', img: getImg(top10[2]?.name || randNpc().name) },
-                             { id: 'f4', type: 'Radio', artist: heroArtist, text: 'Catch similar vibes.', bg: '#A3E635', img: heroImg }
+                             { id: 'f4', type: 'Radio', artist: heroArtist, text: 'Catch similar vibes.', bg: '#A3E635', img: heroImg },
+                             { id: 'f5', type: 'This Is', artist: top10[3]?.name || randNpc().name, text: 'The essential collection.', bg: '#EC4899', img: getImg(top10[3]?.name || randNpc().name) },
+                             { id: 'f6', type: 'Best Of', artist: top10[4]?.name || randNpc().name, text: 'Top tracks all in one place.', bg: '#8B5CF6', img: getImg(top10[4]?.name || randNpc().name) }
                            ].map((r, i) => (
-                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md flex flex-col justify-between relative overflow-hidden bg-white/10" style={r.type === 'This Is' ? {} : { backgroundColor: r.bg }}>
-                                    {r.type === 'This Is' && (
-                                       <>
-                                       <div className="absolute inset-0 bg-white" />
-                                       <div className="absolute inset-x-0 bottom-0 top-[60%]" style={{ backgroundColor: r.bg }} />
-                                       <h3 className="font-black text-black text-center text-xl mt-3 relative z-20">THIS IS</h3>
-                                       <div className="flex-1 w-full relative z-20 flex items-center justify-center">
-                                          {r.img ? <img src={r.img} className="h-full object-cover rounded shadow-[0_8px_20px_rgba(0,0,0,0.4)] relative mt-2" /> : <div className="h-[80%] aspect-square bg-[#282828] rounded" />}
-                                       </div>
-                                       <h3 className="font-black text-black text-center text-[19px] mb-2 leading-tight relative z-20 tracking-tighter" style={{ color: r.bg === '#06B6D4' ? '#000' : '#fff' }}>{r.artist}</h3>
-                                       </>
-                                    )}
-                                    {r.type !== 'This Is' && (
-                                       <>
-                                         <h3 className="font-black text-black text-2xl p-3 z-20 relative mix-blend-multiply">{r.type}<br/>{r.artist}</h3>
-                                         {r.img ? <img src={r.img} className="absolute bottom-[-10%] right-[-10%] w-[80%] h-[80%] object-cover rounded shadow-2xl rotate-12" /> : null}
-                                       </>
-                                    )}
-                                    <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.img ? <img src={r.img} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.type} {r.artist}</h3>
+                                    </div>
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
                                         <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.text}</p>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.type} {r.artist}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.text}</div>
                              </div>
                            ))}
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Mood & Activities</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Discovery & Charts</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                            {[
-                             { id: 'mo1', title: 'Sad Hour', desc: 'Heartbreak anthems and emotional ballads.', bg: '#3b82f6', imgs: [getCover(3), getCover(4), getCover(5), getCover(6)] },
-                             { id: 'mo2', title: 'Late Night Drive', desc: 'Chill beats for empty roads.', bg: '#6366f1', imgs: [getCover(7), getCover(8), getCover(9), getCover(10)] },
-                             { id: 'mo3', title: 'Feelin\' Good', desc: 'Positive vibes only.', bg: '#f59e0b', imgs: [getCover(11), getCover(0), getCover(1), getCover(2)] },
-                             { id: 'mo4', title: 'Workout Power', desc: 'Upbeat tracks to get you moving.', bg: '#ef4444', imgs: [getCover(3), getCover(7), getCover(2), getCover(5)] },
-                             { id: 'mo5', title: 'Study Session', desc: 'Focus and chill.', bg: '#8b5cf6', imgs: [getCover(8), getCover(6), getCover(1), getCover(4)] }
+                             { id: 'c1', title: 'Global Top 50', desc: 'The most played tracks right now.', bgimg: getImg(top10[0]?.name || randNpc().name) },
+                             { id: 'c2', title: 'Viral 50', desc: 'The most viral tracks right now.', bgimg: getImg(top10[1]?.name || randNpc().name) },
+                             { id: 'c3', title: 'Release Radar', desc: 'Catch up on the latest releases.', bgimg: getImg(top10[2]?.name || randNpc().name) },
+                             { id: 'c4', title: 'Fresh Finds', desc: 'New music from independent artists.', bgimg: getImg(top10[3]?.name || randNpc().name) },
+                             { id: 'c5', title: 'New Music Friday', desc: 'The best new releases.', bgimg: getImg(top10[4]?.name || randNpc().name) },
+                             { id: 'c6', title: 'Top Albums', desc: 'The most successful albums this week.', bgimg: getImg(top10[5]?.name || randNpc().name) }
                            ].map(r => (
-                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md relative overflow-hidden bg-[#282828]">
-                                    <div className="w-full h-full grid grid-cols-2 grid-rows-2 opacity-80 mix-blend-luminosity group-hover:scale-105 transition-transform duration-500">
-                                       {r.imgs.map((img, idx) => (
-                                          <div key={idx} className="w-full h-full bg-[#333] border border-[#121212]">
-                                             {img ? <img src={img} className="w-full h-full object-cover" /> : null}
-                                          </div>
-                                       ))}
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.title}</h3>
                                     </div>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-black/40 to-black/10" style={{ mixBlendMode: 'multiply', backgroundColor: r.bg }} />
-                                    <h3 className="absolute bottom-2 left-2 right-2 font-black text-white text-[17px] leading-tight z-20 text-center tracking-tight">{r.title}</h3>
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all shadow-xl z-30">
-                                        <Play className="w-6 h-6 text-black fill-current ml-1" />
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                        <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.desc}</p>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.title}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.desc}</div>
                              </div>
                            ))}
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Popular Genres</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Trending Now</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                            {[
-                             { id: 'g1', title: 'Pop', bg: '#8d67ab', img: getImg(randNpc().name) || `https://i.pravatar.cc/150?u=12` },
-                             { id: 'g2', title: 'Hip-Hop', bg: '#ba5d07', img: getImg(randNpc().name) || `https://i.pravatar.cc/150?u=13` },
-                             { id: 'g3', title: 'Indie', bg: '#608108', img: getImg(randNpc().name) || `https://i.pravatar.cc/150?u=14` },
-                             { id: 'g4', title: 'K-Pop', bg: '#8400e7', img: getImg(randNpc().name) || `https://i.pravatar.cc/150?u=15` },
-                             { id: 'g5', title: 'R&B', bg: '#e1118c', img: getImg(randNpc().name) || `https://i.pravatar.cc/150?u=16` }
+                             { id: 't1', title: 'Summer Hits', desc: 'Songs everyone is talking about.', bgimg: getImg(top10[6]?.name || randNpc().name) },
+                             { id: 't2', title: 'TikTok Trending', desc: 'Viral sounds you know.', bgimg: getImg(top10[7]?.name || randNpc().name) },
+                             { id: 't3', title: 'Rap Caviar', desc: 'New hip-hop heavyweights.', bgimg: getImg(top10[8]?.name || randNpc().name) },
+                             { id: 't4', title: "Today's Top Hits", desc: 'The biggest songs right now.', bgimg: getImg(top10[9]?.name || randNpc().name) },
+                             { id: 't5', title: 'Pop Rising', desc: 'Future hits.', bgimg: getImg(top10[0]?.name || randNpc().name) },
+                             { id: 't6', title: 'Viral Hits', desc: 'Don\'t miss out.', bgimg: getImg(top10[1]?.name || randNpc().name) }
                            ].map(r => (
-                             <div key={r.id} className="min-w-[130px] max-w-[130px] cursor-pointer group">
-                                <div className="aspect-[3/2] rounded-md relative overflow-hidden" style={{ backgroundColor: r.bg }}>
-                                    <h3 className="absolute top-2 left-3 font-black text-white text-[18px] leading-tight z-20 relative mix-blend-overlay">{r.title}</h3>
-                                    <div className="absolute -bottom-4 right-[-10px] w-[75px] h-[75px] rotate-[25deg] shadow-xl rounded overflow-hidden bg-black/20">
-                                        {r.img ? <img src={r.img} className="w-full h-full object-cover" /> : null}
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.title}</h3>
+                                    </div>
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                        <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.title}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.desc}</div>
                              </div>
                            ))}
                         </div>
                     </div>
 
                     <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Discovery & Charts</h2>
+                        <h2 className="text-[22px] font-black mb-6 px-2 hover:underline cursor-pointer">Mood & Activities</h2>
                         <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
                            {[
-                             { id: 'c1', title: 'Global Top 50', desc: 'The most played tracks right now.', bg: '#10b981', imgs: [getCover(2), getCover(6), getCover(10), getCover(0)] },
-                             { id: 'c2', title: 'Viral 50', desc: 'The most viral tracks right now.', bg: '#3b82f6', imgs: [getCover(4), getCover(8), getCover(1), getCover(3)] },
-                             { id: 'c3', title: 'Release Radar', desc: 'Catch up on the latest releases.', bg: '#a3e635', imgs: [getCover(7), getCover(11), getCover(5), getCover(9)] },
-                             { id: 'c4', title: 'Fresh Finds', desc: 'New music from independent artists.', bg: '#8b5cf6', imgs: [getCover(0), getCover(4), getCover(7), getCover(2)] }
+                             { id: 'mo1', title: 'Sad Hour', desc: 'Heartbreak anthems and emotional ballads.', bgimg: getImg(top10[8]?.name || randNpc().name) },
+                             { id: 'mo2', title: 'Late Night', desc: 'Chill beats for empty roads.', bgimg: getImg(top10[7]?.name || randNpc().name) },
+                             { id: 'mo3', title: "Feelin' Good", desc: 'Positive vibes only.', bgimg: getImg(top10[6]?.name || randNpc().name) },
+                             { id: 'mo4', title: 'Workout', desc: 'Upbeat tracks to get you moving.', bgimg: getImg(top10[5]?.name || randNpc().name) },
+                             { id: 'mo5', title: 'Study', desc: 'Focus and chill.', bgimg: getImg(top10[4]?.name || randNpc().name) },
+                             { id: 'mo6', title: 'Party Time', desc: 'Get the party started.', bgimg: getImg(top10[3]?.name || randNpc().name) }
                            ].map(r => (
-                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md relative overflow-hidden bg-[#282828]">
-                                    <div className="w-full h-full grid grid-cols-2 grid-rows-2 opacity-80 mix-blend-luminosity group-hover:scale-105 transition-transform duration-500">
-                                       {r.imgs.map((img, idx) => (
-                                          <div key={idx} className="w-full h-full bg-[#333] border border-[#121212]">
-                                             {img ? <img src={img} className="w-full h-full object-cover" /> : null}
-                                          </div>
-                                       ))}
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.title}</h3>
                                     </div>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-black/40 to-black/10" style={{ mixBlendMode: 'multiply', backgroundColor: r.bg }} />
-                                    <h3 className="absolute bottom-2 left-2 right-2 font-black text-white text-[17px] leading-tight z-20 text-center tracking-tight">{r.title}</h3>
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all shadow-xl z-30">
-                                        <Play className="w-6 h-6 text-black fill-current ml-1" />
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                        <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.desc}</p>
-                             </div>
-                           ))}
-                        </div>
-                    </div>
-
-                    <div>
-                        <h2 className="text-[22px] font-black mb-4 px-2">Featured Playlists</h2>
-                        <div className="flex overflow-x-auto gap-4 pb-4 px-2 hide-scrollbar">
-                           {[
-                             { id: 'p1', title: "Today's Top Hits", desc: 'Drake, Justin Bieber, Bruno Mars', bg: '#f43f5e', imgs: [getCover(8), getCover(1), getCover(2), getCover(3)] },
-                             { id: 'p2', title: 'Dance Party', desc: 'David Guetta, Calvin Harris', bg: '#0ea5e9', imgs: [getCover(5), getCover(11), getCover(0), getCover(9)] },
-                             { id: 'p3', title: 'Global 50', desc: 'Trending globally right now.', bg: '#eab308', imgs: [getCover(6), getCover(4), getCover(10), getCover(7)] },
-                             { id: 'p4', title: 'Discover Weekly', desc: 'New music for you.', bg: '#d946ef', imgs: [getCover(9), getCover(2), getCover(8), getCover(1)] }
-                           ].map(r => (
-                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md relative overflow-hidden bg-[#282828]">
-                                    <div className="w-full h-full grid grid-cols-2 grid-rows-2 opacity-80 mix-blend-luminosity group-hover:scale-105 transition-transform duration-500">
-                                       {r.imgs.map((img, idx) => (
-                                          <div key={idx} className="w-full h-full bg-[#333] border border-[#121212]">
-                                             {img ? <img src={img} className="w-full h-full object-cover" /> : null}
-                                          </div>
-                                       ))}
-                                    </div>
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-black/40 to-black/10" style={{ mixBlendMode: 'multiply', backgroundColor: r.bg }} />
-                                    <h3 className="absolute bottom-2 left-2 right-2 font-black text-white text-[15px] leading-tight z-20 text-center">{r.title}</h3>
-                                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all shadow-xl z-30">
-                                        <Play className="w-6 h-6 text-black fill-current ml-1" />
-                                    </div>
-                                </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.desc}</p>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.title}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.desc}</div>
                              </div>
                            ))}
                         </div>
@@ -735,10 +711,10 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                             <div>
                                 <h3 className="font-bold text-[22px] tracking-tight mb-4">Top Artists</h3>
                                 <div className="flex flex-col gap-2">
-                                  {NPC_ARTISTS.concat([{ name: gameState.artist?.name || 'You', type: 'Player', basePoints: 0, profilePic: gameState.artist?.image } as any]).filter(a => (a.name || '').toLowerCase().includes(searchQuery.toLowerCase())).map(a => (
+                                  {activeNPCs.concat([{ name: gameState.artist?.name || 'You', type: 'Player', basePoints: 0, profilePic: gameState.artist?.image } as any]).filter(a => (a.name || '').toLowerCase().includes(searchQuery.toLowerCase()) && a.name.toLowerCase() !== gameState.artist?.name?.toLowerCase()).map(a => (
                                     <div key={a.name} onClick={() => { setSpotifyViewArtist(a.name === (gameState.artist?.name || 'You') ? null : a.name); setSpotifyTab('profile'); setSearchQuery(''); }} className="flex items-center gap-4 p-2 hover:bg-white/10 rounded-md cursor-pointer transition-colors">
                                         <div className="w-12 h-12 rounded-full overflow-hidden bg-[#282828] shrink-0">
-                                            <img src={a.profilePic || (a.name === gameState.artist?.name ? gameState.artist.image : ARTIST_IMAGES[a.name] || `https://i.pravatar.cc/150?u=${encodeURIComponent(a.name)}`)} className="w-full h-full object-cover" />
+                                            <img src={(a as any).profilePic || (a.name === gameState.artist?.name ? gameState.artist.image : ARTIST_IMAGES[a.name] || `https://i.pravatar.cc/150?u=${encodeURIComponent(a.name)}`)} className="w-full h-full object-cover" />
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="font-bold text-white tracking-tight text-base">{a.name}</span>
@@ -806,26 +782,28 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                                     </button>
                                     <h3 className="font-bold text-[28px] tracking-tight">{exploreCategory}</h3>
                                 </div>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                                     {[
-                                        { id: `ec1_${exploreCategory}`, type: 'Mix', title: `${exploreCategory} Mix`, artists: `${randNpc().name}, ${randNpc().name}`, bg: '#D8B4E2', img: getCover((exploreCategory.length) % 12), imgs: [getCover(0), getCover(1), getCover(2), getCover(3)] },
-                                        { id: `ec2_${exploreCategory}`, type: 'Mix', title: `Essential ${exploreCategory}`, artists: `Top tracks you need.`, bg: '#8B5CF6', img: getCover((exploreCategory.length + 1) % 12), imgs: [getCover(4), getCover(5), getCover(6), getCover(7)] },
-                                        { id: `ec3_${exploreCategory}`, type: 'Mix', title: `${exploreCategory} Hits`, artists: `Trending right now.`, bg: '#FDE047', img: getCover((exploreCategory.length + 2) % 12), imgs: [getCover(8), getCover(9), getCover(10), getCover(11)] },
-                                        { id: `ec4_${exploreCategory}`, type: 'Mix', title: `Fresh ${exploreCategory}`, artists: `New releases.`, bg: '#71A0B6', img: getCover((exploreCategory.length + 3) % 12), imgs: [getCover(2), getCover(4), getCover(6), getCover(8)] },
-                                        { id: `ec5_${exploreCategory}`, type: 'Mix', title: `Classic ${exploreCategory}`, artists: `Timeless hits.`, bg: '#f59e0b', img: getCover((exploreCategory.length + 4) % 12), imgs: [getCover(1), getCover(3), getCover(5), getCover(7)] },
-                                        { id: `ec6_${exploreCategory}`, type: 'Mix', title: `Underground ${exploreCategory}`, artists: `Hidden gems.`, bg: '#10b981', img: getCover((exploreCategory.length + 5) % 12), imgs: [getCover(9), getCover(10), getCover(11), getCover(0)] },
+                                        { id: `ec1_${exploreCategory}`, type: 'Mix', title: `${exploreCategory} Mix`, artists: `${randNpc().name}, ${randNpc().name}`, bgimg: getImg(top10[0]?.name || randNpc().name) },
+                                        { id: `ec2_${exploreCategory}`, type: 'Mix', title: `Essential ${exploreCategory}`, artists: `Top tracks you need.`, bgimg: getImg(top10[1]?.name || randNpc().name) },
+                                        { id: `ec3_${exploreCategory}`, type: 'Mix', title: `${exploreCategory} Hits`, artists: `Trending right now.`, bgimg: getImg(top10[2]?.name || randNpc().name) },
+                                        { id: `ec4_${exploreCategory}`, type: 'Mix', title: `Fresh ${exploreCategory}`, artists: `New releases.`, bgimg: getImg(top10[3]?.name || randNpc().name) },
+                                        { id: `ec5_${exploreCategory}`, type: 'Mix', title: `Classic ${exploreCategory}`, artists: `Timeless hits.`, bgimg: getImg(top10[4]?.name || randNpc().name) },
+                                        { id: `ec6_${exploreCategory}`, type: 'Mix', title: `Underground ${exploreCategory}`, artists: `Hidden gems.`, bgimg: getImg(top10[5]?.name || randNpc().name) },
                                     ].map(r => (
-                                        <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="cursor-pointer group">
-                                           <div className="aspect-square rounded-md relative overflow-hidden bg-[#282828] mb-3">
-                                              <div className="grid grid-cols-2 grid-rows-2 w-full h-full">
-                                                {r.imgs?.map((img, idx) => <img key={idx} src={img} className="w-full h-full object-cover" />)}
+                                        <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="cursor-pointer group flex flex-col">
+                                           <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                              {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                              <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                                  <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.title}</h3>
                                               </div>
-                                              <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1ed760] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-20">
-                                                  <Play className="w-5 h-5 text-black ml-1 fill-current" />
+                                              <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                                                  <Play className="w-5 h-5 text-black fill-current ml-1" />
                                               </div>
                                            </div>
-                                           <h3 className="font-bold text-white text-[13px] truncate group-hover:underline">{r.title}</h3>
-                                           <p className="text-white/60 text-[12px] truncate mt-0.5">{r.artists}</p>
+                                           <div className="font-bold text-white text-[15px] truncate mb-1">{r.title}</div>
+                                           <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.artists}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -928,7 +906,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                 <h2 className="text-xl font-bold mb-4">Popular</h2>
                 <div className="flex flex-col gap-1 max-w-4xl">
                     {(showAllTopSongs ? topSongs : topSongs.slice(0, 5)).map((song, i) => (
-                        <div key={song.id} className="flex items-center gap-4 hover:bg-white/10 p-2 rounded-lg group cursor-pointer" onClick={() => !isNPC ? handleSelectRelease(song as Release) : setSelectedSpotifyRelease(song as Release)}>
+                        <div key={song.id} className="flex items-center gap-4 hover:bg-white/10 p-2 rounded-lg group cursor-pointer" onClick={() => !isNPC ? handleSelectRelease(song as unknown as Release) : setSelectedSpotifyRelease(song as unknown as Release)}>
                             <div className="w-6 text-center text-white/60 font-medium text-sm group-hover:hidden">{i + 1}</div>
                             <div className="w-6 text-center text-white hidden group-hover:block"><Play className="w-4 h-4 fill-current m-auto"/></div>
                             <div className="w-10 h-10 bg-[#282828] shrink-0 rounded overflow-hidden">
@@ -959,7 +937,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                             <button className="text-white/60 text-[13px] font-bold hover:underline mb-[2px]" onClick={() => setIsSelectingPick(true)}>Edit</button>
                         )}
                     </div>
-                    <div className="flex gap-4 items-start max-w-sm cursor-pointer group" onClick={() => !isNPC ? handleSelectRelease(popularRelease as Release) : setSelectedSpotifyRelease(popularRelease as Release)}>
+                    <div className="flex gap-4 items-start max-w-sm cursor-pointer group" onClick={() => !isNPC ? handleSelectRelease(popularRelease as unknown as Release) : setSelectedSpotifyRelease(popularRelease as unknown as Release)}>
                         <div className="w-[84px] h-[84px] bg-[#282828] shrink-0 rounded-md overflow-hidden relative">
                             {popularRelease.coverImage ? <img src={popularRelease.coverImage || undefined} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /> : <Disc className="w-8 h-8 text-white/20 m-auto mt-6" />}
                         </div>
@@ -991,7 +969,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                          artistId: (r as any).artistId,
                          releaseTitle: r.title,
                          coverImage: r.coverImage || undefined,
-                         type: r.type,
+                         releaseType: (r as any).releaseType || (r as any).type || 'Single',
                          releaseDate: r.releaseDate || dt.toISOString(),
                          totalPreSaves: r.totalPreSaves || 0,
                          isPlayerRelease: false,
@@ -1062,7 +1040,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     
                     <div className="flex overflow-x-auto pb-4 gap-4 hide-scrollbar">
                         {(isNPC ? npcReleases.slice(0, 8) : [...standaloneReleases].sort((a, b) => getPlatformStreams(b, 'spotify') - getPlatformStreams(a, 'spotify')).slice(0, 5)).map((rel, i) => (
-                            <div key={rel.id} className="min-w-[140px] max-w-[140px] flex flex-col gap-3 group cursor-pointer" onClick={() => !isNPC ? handleSelectRelease(rel) : setSelectedSpotifyRelease(rel as Release)}>
+                            <div key={rel.id} className="min-w-[140px] max-w-[140px] flex flex-col gap-3 group cursor-pointer" onClick={() => !isNPC ? handleSelectRelease(rel) : setSelectedSpotifyRelease(rel as unknown as Release)}>
                             <div className="w-full aspect-square bg-[#282828] rounded-md overflow-hidden relative">
                                 {rel.coverImage ? <img src={rel.coverImage || undefined} className="w-full h-full object-cover" /> : <Disc className="w-12 h-12 text-white/20 m-auto mt-10" />}
                                 <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl">
@@ -1091,45 +1069,23 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     <h2 className="text-xl font-bold mb-4">Featuring {artistName}</h2>
                     <div className="flex overflow-x-auto pb-4 gap-4 hide-scrollbar">
                         {[
-                            { id: 'ap1', type: 'This Is', artist: artistName, text: `This is ${artistName}. The essential tracks, all in one playlist.`, bg: '#0ea5e9', img: artistImage },
-                            { id: 'ap2', type: 'Mix', artist: artistName, text: `${artistName}, ${NPC_ARTISTS[0].name}, and more`, bg: '#FDE047', img: artistImage, imgs: [artistImage, getImg(top10[1]?.name || randNpc().name), getImg(top10[2]?.name || randNpc().name), getImg(top10[3]?.name || randNpc().name)] },
-                            { id: 'ap3', type: 'Radio', artist: artistName, text: `Catch similar vibes.`, bg: '#8b5cf6', img: artistImage, imgs: [artistImage, getImg(randNpc().name), getImg(randNpc().name), getImg(randNpc().name)] }
+                            { id: 'ap1', type: 'This Is', artist: artistName, text: `This is ${artistName}. The essential tracks, all in one playlist.`, bgimg: artistImage },
+                            { id: 'ap2', type: 'Mix', artist: artistName, text: `${artistName}, ${activeNPCs[0].name}, and more`, bgimg: getImg(activeNPCs[0].name) || artistImage },
+                            { id: 'ap3', type: 'Radio', artist: artistName, text: `Catch similar vibes.`, bgimg: artistImage }
                         ].map((r, i) => (
-                            <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group">
-                                <div className="aspect-square rounded-md flex flex-col justify-between relative overflow-hidden bg-white/10" style={(r.type === 'This Is' || r.type === 'Mix') ? {} : { backgroundColor: r.bg }}>
-                                    {r.type === 'This Is' && (
-                                       <>
-                                       <div className="absolute inset-0 bg-white" />
-                                       <div className="absolute inset-x-0 bottom-0 top-[60%]" style={{ backgroundColor: r.bg }} />
-                                       <h3 className="font-black text-black text-center text-xl mt-3 relative z-20">THIS IS</h3>
-                                       <div className="flex-1 w-full relative z-20 flex items-center justify-center">
-                                          {r.img ? <img src={r.img} className="h-full object-cover rounded shadow-[0_8px_20px_rgba(0,0,0,0.4)] relative mt-2" /> : <div className="h-[80%] aspect-square bg-[#282828] rounded" />}
-                                       </div>
-                                       <h3 className="font-black text-black text-center text-[19px] mb-2 leading-tight relative z-20 tracking-tighter" style={{ color: r.bg === '#06B6D4' ? '#000' : '#fff' }}>{r.artist}</h3>
-                                       </>
-                                    )}
-                                    {r.type === 'Mix' && (
-                                       <>
-                                        <div className="absolute inset-0 bg-[#282828]" />
-                                        {r.img && <img src={r.img} className="absolute inset-0 w-full h-full object-cover" />}
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                                        <div className="relative z-20 flex px-2 mb-3 mt-auto">
-                                           <div className="w-1.5 h-[22px] shrink-0 mr-1.5 bg-white" style={{ backgroundColor: r.bg }} />
-                                           <span className="bg-white/90 px-1 text-[13px] font-black text-black leading-tight tracking-tight shadow-md py-0.5">{r.artist} Mix</span>
-                                        </div>
-                                       </>
-                                    )}
-                                    {r.type === 'Radio' && (
-                                       <>
-                                         <h3 className="font-black text-black text-2xl p-3 z-20 relative mix-blend-multiply">{r.artist}<br/>Radio</h3>
-                                         {r.img ? <img src={r.img} className="absolute bottom-[-10%] right-[-10%] w-[80%] h-[80%] object-cover rounded shadow-2xl rotate-12" /> : null}
-                                       </>
-                                    )}
-                                    <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
+                             <div key={r.id} onClick={() => setSelectedPlaylist(r)} className="min-w-[150px] max-w-[150px] cursor-pointer group flex flex-col">
+                                <div className="w-full aspect-square rounded shadow-[0_8px_24px_rgba(0,0,0,0.5)] mb-3 relative overflow-hidden bg-[#282828] border border-white/5">
+                                    {r.bgimg ? <img src={r.bgimg} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" /> : null}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                                    <div className="absolute inset-0 flex flex-col justify-end p-3">
+                                        <h3 className="font-black text-white text-[20px] leading-tight drop-shadow-md">{r.type} {r.artist}</h3>
+                                    </div>
+                                    <div className="absolute bottom-3 right-3 w-10 h-10 bg-[#1db954] rounded-full flex items-center justify-center opacity-0 translate-y-3 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl z-30">
                                         <Play className="w-5 h-5 text-black fill-current ml-1" />
                                     </div>
                                 </div>
-                                <p className="text-white/50 text-[13px] font-medium mt-3 line-clamp-2 leading-snug hover:text-white/80">{r.text}</p>
+                                <div className="font-bold text-white text-[15px] truncate mb-1">{r.type} {r.artist}</div>
+                                <div className="text-[#a7a7a7] text-[13px] line-clamp-2 leading-snug">{r.text}</div>
                              </div>
                         ))}
                     </div>
@@ -1168,7 +1124,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
          </div>
 
          {/* Bottom Nav */}
-         <div className="fixed bottom-0 left-0 right-0 py-3 bg-[#121212] border-t border-white/10 z-[200] flex justify-center items-end px-6 gap-12 md:gap-24 block">
+         <div className="fixed bottom-[72px] left-0 right-0 py-3 bg-[#121212] border-t border-white/10 z-[200] flex justify-center items-end px-6 gap-12 md:gap-24 block">
              <button onClick={() => { setSpotifyTab('home'); setSelectedPlaylist(null); }} className={`flex flex-col items-center gap-1 transition-colors ${spotifyTab === 'home' ? 'text-white' : 'text-white/50 hover:text-white/80'}`}>
                 <Home className={`w-6 h-6 ${spotifyTab==='home'?'fill-current':''}`} />
                 <span className="text-[10px] font-medium tracking-wide">Home</span>
@@ -1215,7 +1171,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                      if (discoFilter === 'Singles') return ['EP', 'Single Pack', 'Single'].includes(rel.type);
                      return true;
                   }).map((rel, i) => (
-                     <div key={rel.id} className="flex gap-4 items-center group cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg" onClick={() => { if(!isNPC) { handleSelectRelease(rel); } else { setSelectedSpotifyRelease(rel as Release); }}}>
+                     <div key={rel.id} className="flex gap-4 items-center group cursor-pointer hover:bg-white/5 p-2 -mx-2 rounded-lg" onClick={() => { if(!isNPC) { handleSelectRelease(rel); } else { setSelectedSpotifyRelease(rel as unknown as Release); }}}>
                         <div className="w-20 h-20 bg-[#282828] rounded-md overflow-hidden relative shrink-0 shadow-lg">
                            {rel.coverImage ? <img src={rel.coverImage || undefined} className="w-full h-full object-cover" /> : <Disc className="w-10 h-10 text-white/20 m-auto mt-5" />}
                         </div>
@@ -1348,7 +1304,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
     const newThisWeekRels = allSortedRels.slice(0, 10);
     const recentRels = allSortedRels.slice(10, 25);
     const trendingList = allPublishedRels.filter(r => r.type === 'Single' && !isProject(r.type)).sort((a,b) => getPlatformStreams(b, 'appleMusic') - getPlatformStreams(a, 'appleMusic')).slice(0, 10);
-    const comingSoonRels = gameState.schedules && gameState.schedules.length > 0 ? gameState.schedules : [];
+    const comingSoonRels = gameState.scheduledReleases && gameState.scheduledReleases.length > 0 ? gameState.scheduledReleases : [];
 
     const SectionHeader = ({ title }: { title: string }) => (
         <h2 className="text-[22px] md:text-2xl font-bold mb-4 flex items-center gap-1 cursor-pointer hover:opacity-80 group">
@@ -1511,7 +1467,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     <SectionHeader title="New This Week" />
                     <div className="flex overflow-x-auto gap-4 md:gap-6 hide-scrollbar pb-6 snap-x">
                         {newThisWeekRels.map(rel => (
-                            <div key={rel.id} className="min-w-[160px] max-w-[160px] md:min-w-[200px] md:max-w-[200px] cursor-pointer group flex flex-col gap-2 snap-start" onClick={() => handleSelectAppleRelease(rel as Release)}>
+                            <div key={rel.id} className="min-w-[160px] max-w-[160px] md:min-w-[200px] md:max-w-[200px] cursor-pointer group flex flex-col gap-2 snap-start" onClick={() => handleSelectAppleRelease(rel as unknown as Release)}>
                                 <div className="w-full aspect-square rounded-xl overflow-hidden shadow-lg relative bg-zinc-900 border border-zinc-800">
                                     <img src={rel.coverImage || getCover(1)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                     <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1533,7 +1489,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     <SectionHeader title="Recent Releases" />
                     <div className="flex overflow-x-auto gap-4 md:gap-6 hide-scrollbar pb-6 snap-x">
                         {recentRels.map(rel => (
-                            <div key={rel.id} className="min-w-[160px] max-w-[160px] md:min-w-[200px] md:max-w-[200px] cursor-pointer group flex flex-col gap-2 snap-start" onClick={() => handleSelectAppleRelease(rel as Release)}>
+                            <div key={rel.id} className="min-w-[160px] max-w-[160px] md:min-w-[200px] md:max-w-[200px] cursor-pointer group flex flex-col gap-2 snap-start" onClick={() => handleSelectAppleRelease(rel as unknown as Release)}>
                                 <div className="w-full aspect-square rounded-xl overflow-hidden shadow-lg relative bg-zinc-900 border border-zinc-800">
                                     <img src={rel.coverImage || getCover(2)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                     <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1649,7 +1605,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                     <SectionHeader title="Trending Songs" />
                     <div className="grid grid-rows-4 grid-flow-col gap-x-8 gap-y-3 overflow-x-auto hide-scrollbar pb-6 snap-x">
                         {trendingList.map((rel, i) => (
-                            <div key={rel.id} className="w-[300px] md:w-[350px] flex items-center gap-4 group cursor-pointer hover:bg-zinc-900 p-2 -ml-2 rounded-xl border-b border-zinc-800/50 snap-start" onClick={() => handleSelectAppleRelease(rel as Release)}>
+                            <div key={rel.id} className="w-[300px] md:w-[350px] flex items-center gap-4 group cursor-pointer hover:bg-zinc-900 p-2 -ml-2 rounded-xl border-b border-zinc-800/50 snap-start" onClick={() => handleSelectAppleRelease(rel as unknown as Release)}>
                                 <div className="w-12 h-12 md:w-14 md:h-14 rounded-md overflow-hidden bg-zinc-800 shrink-0 relative">
                                     <img src={rel.coverImage || getCover(i)} className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1679,11 +1635,11 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                                     {rel.coverImage && <img src={rel.coverImage} className="w-full h-full object-cover opacity-70 group-hover:scale-105 transition-transform duration-500" />}
                                     <div className="absolute inset-0 bg-black/30" />
                                     <div className="absolute bottom-3 right-3 bg-white/10 backdrop-blur-md px-2 py-1 rounded-md border border-white/20">
-                                        <span className="text-xs font-bold text-white uppercase tracking-widest">{rel.type || 'Album'}</span>
+                                        <span className="text-xs font-bold text-white uppercase tracking-widest">{rel.releaseType || (rel as any).type || 'Album'}</span>
                                     </div>
                                 </div>
                                 <div className="flex flex-col mt-1">
-                                    <span className="font-semibold text-white text-[15px] leading-tight line-clamp-1">{rel.title}</span>
+                                    <span className="font-semibold text-white text-[15px] leading-tight line-clamp-1">{rel.releaseTitle}</span>
                                     <span className="text-zinc-400 text-[13px] hover:underline line-clamp-1">{gameState.artist.name}</span>
                                     <span className="text-[#fa243c] text-xs font-semibold mt-1">Releases {rel.releaseDate}</span>
                                 </div>
@@ -1783,7 +1739,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                      <div className="mt-8 flex gap-8">
                          <div>
                              <p className="text-zinc-400 text-xs font-bold uppercase tracking-wider mb-1">Hometown</p>
-                             <p className="font-bold">{isNPC ? currentArtistData?.label : gameState.artist.country}</p>
+                             <p className="font-bold">{isNPC ? (currentArtistData as any)?.label || "Global" : gameState.artist.country}</p>
                          </div>
                      </div>
                   </div>
@@ -1812,10 +1768,10 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                   <div className="mb-16">
                       <h2 className="text-2xl font-black mb-6">Search Results</h2>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-                          {[...NPC_ARTISTS.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).map(a => ({ id: 'artist-'+a.name, title: a.name, type: 'artist' as const })),
+                          {[...activeNPCs.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).map(a => ({ id: 'artist-'+a.name, title: a.name, type: 'artist' as const })),
                             ...publishedReleases.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase())).map(r => ({ ...r, type: 'release' as const }))
                           ].map((res, i) => (
-                              <div key={res.id} onClick={() => res.type === 'artist' ? (setAppleViewArtist(res.title), setSearchQuery(''), setAppleMusicTab('profile')) : handleSelectAppleRelease(res as Release)} className="flex items-center gap-4 py-3 group cursor-pointer border-b border-zinc-800 hover:bg-zinc-900 px-4 rounded-lg transition-colors">
+                              <div key={res.id} onClick={() => res.type === 'artist' ? (setAppleViewArtist(res.title), setSearchQuery(''), setAppleMusicTab('profile')) : handleSelectAppleRelease(res as unknown as Release)} className="flex items-center gap-4 py-3 group cursor-pointer border-b border-zinc-800 hover:bg-zinc-900 px-4 rounded-lg transition-colors">
                                   <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
                                       {res.type === 'artist' ? <User className="w-6 h-6 text-zinc-500" /> : <Disc className="w-6 h-6 text-zinc-500" />}
                                   </div>
@@ -2015,7 +1971,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
         )}
 
         {/* Bottom Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 h-20 bg-[#1c1c1e]/90 backdrop-blur-md border-t border-zinc-800 z-[400] flex justify-around items-center px-4 md:px-24">
+        <div className="fixed bottom-[72px] left-0 right-0 h-20 bg-[#1c1c1e]/90 backdrop-blur-md border-t border-zinc-800 z-[400] flex justify-around items-center px-4 md:px-24">
            <button 
               onClick={() => { setAppleMusicTab('home'); setAppleSelectedPlaylist(null); }} 
               className={`flex flex-col items-center justify-center w-24 gap-1 ${appleMusicTab === 'home' ? 'text-[#fa243c]' : 'text-zinc-400 hover:text-zinc-600'}`}
@@ -2144,6 +2100,8 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
         let streams = Math.floor(npc.points * 3.5 * platformMulti); 
         return { album: npc, streams, artist: npc.artist, isPlayer: false };
     });
+
+    const combinedAlbumsList = [...globalAlbumsList, ...npcAlbumsList].sort((a,b) => b.streams - a.streams).slice(0, 200);
 
     const renderAmazonPlaylistContent = () => {
         if (!amazonSelectedPlaylist) return null;
@@ -2690,7 +2648,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                   {isNPC ? `A popular artist known worldwide, ${artistName} has captured the attention of listeners around the world.` : (gameState.artist.socialProfile?.bio || `Following the release of their recent projects, ${gameState.artist.name} continues to connect with audiences and reach new heights.`)}
                </p>
                <div className="mt-4 pt-4 border-t border-white/10 text-white/50 text-xs">
-                  Hometown: {isNPC ? currentArtistData?.label : gameState.artist.country}
+                  Hometown: {isNPC ? (currentArtistData as any)?.label || "Global" : gameState.artist.country}
                </div>
             </div>
          </div>
@@ -2857,10 +2815,10 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
                      <div className="px-4 md:px-8 mb-16 mt-8">
                          <h2 className="text-2xl font-black mb-6">Search Results</h2>
                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
-                             {[...NPC_ARTISTS.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).map(a => ({ id: 'artist-'+a.name, title: a.name, type: 'artist' as const })),
+                             {[...activeNPCs.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).map(a => ({ id: 'artist-'+a.name, title: a.name, type: 'artist' as const })),
                                ...publishedReleases.filter(r => r.title.toLowerCase().includes(searchQuery.toLowerCase())).map(r => ({ ...r, type: 'release' as const }))
                              ].map((res, i) => (
-                                 <div key={res.id} onClick={() => res.type === 'artist' ? (setAmazonViewArtist(res.title), setSearchQuery(''), setAmazonMusicTab('profile')) : handleSelectAmazonRelease(res as Release)} className="flex items-center gap-4 py-3 group cursor-pointer border-b border-white/5 hover:bg-white/5 px-4 rounded-lg transition-colors">
+                                 <div key={res.id} onClick={() => res.type === 'artist' ? (setAmazonViewArtist(res.title), setSearchQuery(''), setAmazonMusicTab('profile')) : handleSelectAmazonRelease(res as unknown as Release)} className="flex items-center gap-4 py-3 group cursor-pointer border-b border-white/5 hover:bg-white/5 px-4 rounded-lg transition-colors">
                                      <div className="w-12 h-12 bg-zinc-800 rounded-lg overflow-hidden shrink-0 flex items-center justify-center">
                                          {res.type === 'artist' ? <User className="w-6 h-6 text-white/30" /> : <Disc className="w-6 h-6 text-white/30" />}
                                      </div>
@@ -2925,7 +2883,7 @@ export function PlatformsView({ gameState, setGameState }: PlatformsViewProps) {
             </div>
          ) : null}
          {/* Bottom Navigation */}
-         <div className="fixed bottom-0 left-0 right-0 h-20 bg-[#000000]/90 backdrop-blur-md border-t border-white/10 z-[400] flex justify-around items-center px-4 md:px-24">
+         <div className="fixed bottom-[72px] left-0 right-0 h-20 bg-[#000000]/90 backdrop-blur-md border-t border-white/10 z-[400] flex justify-around items-center px-4 md:px-24">
             <button 
                onClick={() => { setAmazonMusicTab('home'); setAmazonSelectedPlaylist(null); setAmazonHighlightId(null); }} 
                className={`flex flex-col items-center justify-center w-24 gap-1 ${amazonMusicTab === 'home' ? 'text-[#00e0ff]' : 'text-white/40 hover:text-white/60'}`}

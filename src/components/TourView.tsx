@@ -430,7 +430,7 @@ export function TourView({ gameState, setGameState, currentDate }: TourViewProps
                               {schedOpener && <button onClick={() => setSchedOpener(null)} className="text-[10px] bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold uppercase hover:bg-red-500/30">Clear</button>}
                            </div>
                            <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
-                              {NPC_ARTISTS.map((npc, i) => {
+                              {NPC_ARTISTS.filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()).map((npc, i) => {
                                   const isSelected = schedOpener === npc.name;
                                   const fee = Math.floor(npc.basePoints * 0.05);
                                   const rating = Math.min(100, Math.floor(npc.basePoints / 5000));

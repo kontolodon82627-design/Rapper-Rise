@@ -63,7 +63,7 @@ function CreateSongForm({ gameState, setGameState, currentDate }: StudioViewProp
   const [producerLvl, setProducerLvl] = useState(0);
   const [composerLvl, setComposerLvl] = useState(0);
 
-  const rankedNPCs = [...NPC_ARTISTS].sort((a, b) => a.name.localeCompare(b.name));
+  const rankedNPCs = [...NPC_ARTISTS].filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()).sort((a, b) => a.name.localeCompare(b.name));
 
   const calculateCollabCost = (npc: any) => {
      // Taylor Swift is the benchmark at 450000 base points = $5,000,000
@@ -96,7 +96,7 @@ function CreateSongForm({ gameState, setGameState, currentDate }: StudioViewProp
     const pCost = producerLvl === 0 ? 0 : (producerLvl * 1000);
     const cCost = composerLvl === 0 ? 0 : (composerLvl * 600);
     const totalCollabCost = selectedCollabs.reduce((sum, name) => {
-      const npc = NPC_ARTISTS.find(n => n.name === name);
+      const npc = NPC_ARTISTS.find(n => n.name === name && (!gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()));
       return sum + (npc ? calculateCollabCost(npc) : 0);
     }, 0);
     return swCost + pCost + cCost + totalCollabCost;
@@ -162,7 +162,7 @@ function CreateSongForm({ gameState, setGameState, currentDate }: StudioViewProp
       genre,
       collaborator: selectedCollabs.join(', '),
       featuredArtistCost: selectedCollabs.reduce((sum, name) => {
-        const npc = NPC_ARTISTS.find(n => n.name === name);
+        const npc = NPC_ARTISTS.find(n => n.name === name && (!gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()));
         return sum + (npc ? calculateCollabCost(npc) : 0);
       }, 0),
       qualityModifier: calculateQuality()

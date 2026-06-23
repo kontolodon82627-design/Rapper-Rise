@@ -1,5 +1,4 @@
 import { GameState } from './types';
-import { generateNPCSongs, generateNPCAlbums } from './constants';
 import { ARTIST_IMAGES } from './artistImages';
 
 export const computeCharts = (gameState: GameState) => {

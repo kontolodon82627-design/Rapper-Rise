@@ -56,6 +56,82 @@ export const TwitterPost = ({ profileName, handle, profileImage, tweetText, chil
   )
 }
 
+export const PlatformMilestoneCard = ({ platform, albumCover, typeLabel, dateLabel, title, artist, subtitle, detail, metricValue, changePercent, metricLabel }: any) => {
+  const platforms: any = {
+    'Spotify': {
+       bgStart: '#115C2F',
+       bgMid: '#062B14',
+       bgEnd: '#000000',
+       icon: <svg viewBox="0 0 24 24" className="w-[60%] h-[60%] fill-[#1db954]">
+               <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.24 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.2-1.261 11.28-1.021 15.721 1.62.539.3.719 1.02.419 1.56-.239.54-.959.72-1.56.3z" />
+             </svg>
+    },
+    'AppleMusic': {
+       bgStart: '#fa243c',
+       bgMid: '#5c0612',
+       bgEnd: '#1a0004',
+       icon: <svg viewBox="0 0 24 24" className="w-[60%] h-[60%] fill-[#fa243c]">
+               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm2.1 11.2c-.3 1.3-1.4 2.2-2.7 2.2s-2.4-.9-2.7-2.1c-.1-.3 0-.6.1-.9L10.3 8c.2-.7.8-1.2 1.5-1.2h.5c.7 0 1.3.5 1.4 1.1l1.5 4.5c.2.3.2.6.1.8z" />
+             </svg>
+    },
+    'AmazonMusic': {
+       bgStart: '#00A8E1',
+       bgMid: '#003345',
+       bgEnd: '#001117',
+       icon: <span className="text-[#00A8E1] font-black text-[10px] sm:text-[12px] leading-none mt-[2px]">am</span>
+    },
+    'YouTubeMusic': {
+       bgStart: '#FF0000',
+       bgMid: '#330000',
+       bgEnd: '#000000',
+       icon: <svg viewBox="0 0 24 24" fill="none" stroke="#FF0000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-[60%] h-[60%]"><circle cx="12" cy="12" r="10" /><path d="M10 8l6 4-6 4z" fill="#FF0000" /></svg>
+    },
+    'YouTube': {
+       bgStart: '#FF0000',
+       bgMid: '#330000',
+       bgEnd: '#000000',
+       icon: <svg viewBox="0 0 24 24" fill="#FF0000" className="w-[70%] h-[70%]"><path d="M21.58 6.42A2.8 2.8 0 0 0 19.62 4.5C17.88 4 12 4 12 4s-5.88 0-7.62.5C2.64 4.96 1.16 6.44 1.16 8.35a29.88 29.88 0 0 0 0 7.3c0 1.91 1.48 3.39 3.22 3.85C6.12 20 12 20 12 20s5.88 0 7.62-.5c1.74-.46 3.22-1.94 3.22-3.85a30.2 30.2 0 0 0 .74-7.23zM9.54 15.54V8.46L15.82 12l-6.28 3.54z"/></svg>
+    }
+  };
+
+  const p = platforms[platform] || platforms['Spotify'];
+
+  return (
+    <div className={`flex flex-col w-full sm:w-[85%] max-w-[400px] sm:mx-auto text-white overflow-hidden sm:rounded-2xl relative font-sans border-y sm:border border-gray-800`} style={{ background: `linear-gradient(to bottom right, ${p.bgStart}, ${p.bgMid}, ${p.bgEnd})` }}>
+       <div className="flex items-center gap-2 p-3 sm:p-4 border-b border-white/10">
+          <div className="w-5 h-5 bg-white rounded-full flex items-center justify-center shrink-0">
+             {p.icon}
+          </div>
+          <span className="text-[11px] sm:text-xs font-bold tracking-widest text-white uppercase truncate">{platform} Update</span>
+          <span className="ml-auto text-[9px] sm:text-[10px] text-white/70 font-bold uppercase tracking-widest shrink-0">{dateLabel}</span>
+       </div>
+       
+       <div className="p-4 sm:p-6 flex flex-col items-center text-center">
+          <div className="w-[160px] h-[160px] shadow-[0_10px_40px_rgba(0,0,0,0.8)] mb-5 relative group overflow-hidden bg-black flex items-center justify-center">
+             {albumCover ? <img src={albumCover || undefined} className="w-full h-full object-cover transition-transform group-hover:scale-105" /> : <span className="text-white/50 font-bold text-xl">COVER</span>}
+             <div className="absolute top-2 left-2 bg-black/80 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase backdrop-blur-md rounded-sm">
+                {typeLabel || 'MILESTONE'}
+             </div>
+          </div>
+          
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight leading-tight mb-1 text-white w-full line-clamp-2">{title}</h2>
+          <h3 className="text-white/70 text-sm sm:text-base font-medium truncate w-full mb-4">{artist}</h3>
+          
+          <div className="w-full bg-black/40 border border-white/5 rounded-xl p-3 sm:p-4 mb-3 flex flex-col items-center justify-center backdrop-blur-sm shadow-inner mt-auto">
+              <div className="text-[11px] sm:text-[12px] font-bold tracking-widest text-white/60 uppercase mb-1">{metricLabel}</div>
+              <div className="text-2xl sm:text-4xl font-black tracking-tighter text-white drop-shadow-md">
+                 {metricValue}
+                 {changePercent && <span className="text-xs sm:text-sm font-bold text-[#4ade80] ml-2 align-middle">{changePercent}</span>}
+              </div>
+          </div>
+          
+          {subtitle && <div className="text-[12px] sm:text-sm font-bold text-yellow-400 max-w-full leading-snug">{subtitle}</div>}
+          {detail && <div className="text-[10px] sm:text-xs font-bold tracking-[0.1em] mt-2 text-white/50 uppercase">{detail}</div>}
+       </div>
+    </div>
+  )
+}
+
 export const SpotifyMilestoneCard = ({ albumCover, typeLabel, dateLabel, title, artist, dailyStreams, changePercent, totalStreams }: any) => {
   return (
     <div className="flex w-[90%] sm:w-[85%] max-w-[500px] mx-auto bg-[#1b1464] text-white overflow-hidden rounded-2xl relative font-sans aspect-[2/1] border border-gray-800 items-stretch">

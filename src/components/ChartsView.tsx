@@ -371,41 +371,66 @@ export function ChartsView({ gameState, onClose }: ChartsViewProps) {
                 <div className="text-center p-12 text-gray-400 font-bold uppercase tracking-widest text-sm">No data available yet. Release more music.</div>
             )}
             
-            <div className="w-full flex flex-col gap-1.5 bg-[#f2f0eb] py-1.5 px-0 max-w-4xl mx-auto">
+            <div className="w-full flex flex-col bg-[#f2f0eb] max-w-5xl mx-auto">
+                {/* Desktop Data Columns Header */}
+                {!isAlbumChart && currentData.length > 0 && (
+                   <div className="hidden md:flex items-center px-4 py-2 border-b-4 border-black text-[10px] font-black tracking-widest uppercase text-gray-500 sticky top-[138px] bg-[#f2f0eb] z-20">
+                      <div className="w-16 md:w-24 text-center shrink-0">THIS<br/>WEEK</div>
+                      <div className="flex-1">AWARD</div>
+                      <div className="w-14 text-center shrink-0 text-black">LAST<br/>WEEK</div>
+                      <div className="w-14 text-center shrink-0 ml-6 text-black">PEAK<br/>POS.</div>
+                      <div className="w-14 text-center shrink-0 ml-6 text-black">WEEKS<br/>ON CHART</div>
+                   </div>
+                )}
+                {isAlbumChart && currentData.length > 0 && (
+                   <div className="hidden md:flex items-center px-4 py-2 border-b-4 border-black text-[10px] font-black tracking-widest uppercase text-gray-500 sticky top-[138px] bg-[#f2f0eb] z-20">
+                      <div className="w-16 md:w-24 text-center shrink-0">THIS<br/>WEEK</div>
+                      <div className="flex-1">AWARD</div>
+                      <div className="w-24 text-right shrink-0 text-black">ACTIVITY</div>
+                      <div className="w-24 text-right shrink-0 ml-6 text-black">ALBUMS</div>
+                   </div>
+                )}
+
                 {currentData.map((item, index) => {
                    const isPlayer = item.isPlayer;
                    const isFirst = index === 0;
                    const label = isPlayer ? 'INDEPENDENT' : (item?.id?.length % 2 === 0 ? 'REPUBLIC' : 'ISLAND');
 
                    return (
-                     <div key={`${item?.id}-${index}`} className="flex items-start bg-white w-full pr-4 py-4 relative group border-b border-gray-100">
+                     <div key={`${item?.id}-${index}`} className="flex items-stretch bg-white w-full pr-4 py-3 relative group border-b border-gray-300">
                         {/* Rank and Movement */}
-                        <div className="w-16 md:w-20 shrink-0 flex flex-col items-center justify-start pt-2">
-                           {isAlbumChart && isFirst ? (
-                                <div className="bg-[#cc2b2b] text-white w-8 h-8 rounded-md flex items-center justify-center font-bold text-xl mb-1 mt-1">
-                                   {index + 1}
-                                </div>
+                        <div className="w-16 md:w-24 shrink-0 flex flex-col items-center justify-center relative">
+                           {isFirst ? (
+                                <span className="text-5xl md:text-6xl font-black tracking-tighter text-black" style={{ fontFamily: 'Impact, sans-serif' }}>{index + 1}</span>
                            ) : (
                                 <span className="text-3xl md:text-4xl font-black mb-1 tracking-tighter text-black" style={{ fontFamily: 'Impact, sans-serif' }}>{index + 1}</span>
                            )}
                            
                            {!isAlbumChart && (
-                              item.isNew && !item.isReEntry ? (
-                                  <span className="bg-[#00f878] text-black text-[10px] font-bold px-1.5 py-0.5 uppercase tracking-wide">NEW</span>
-                              ) : item.isReEntry ? (
-                                  <span className="text-blue-500 text-[10px] font-bold uppercase tracking-wide">RE</span>
-                              ) : item.movement > 0 ? (
-                                  <ArrowUp className="w-5 h-5 text-gray-400" strokeWidth={2} />
-                              ) : item.movement < 0 ? (
-                                  <ArrowDown className="w-5 h-5 text-gray-400" strokeWidth={2} />
-                              ) : (
-                                  <ArrowRight className="w-5 h-5 text-gray-400" strokeWidth={2} />
-                              )
+                               <div className="mt-1 flex items-center justify-center h-5">
+                                  {item.isNew && !item.isReEntry ? (
+                                      <span className="bg-[#ff4e00] text-white text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-widest rounded-sm">NEW</span>
+                                  ) : item.isReEntry ? (
+                                      <span className="bg-[#00f878] text-black text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-widest rounded-sm">RE</span>
+                                  ) : item.movement > 0 ? (
+                                      <div className="flex items-center gap-0.5 text-gray-500">
+                                         <ArrowUp className="w-4 h-4" strokeWidth={3} />
+                                         <span className="text-[10px] font-bold">{item.movement}</span>
+                                      </div>
+                                  ) : item.movement < 0 ? (
+                                      <div className="flex items-center gap-0.5 text-gray-500">
+                                         <ArrowDown className="w-4 h-4" strokeWidth={3} />
+                                         <span className="text-[10px] font-bold">{Math.abs(item.movement)}</span>
+                                      </div>
+                                  ) : (
+                                      <ArrowRight className="w-4 h-4 text-gray-300" strokeWidth={3} />
+                                  )}
+                               </div>
                            )}
                         </div>
 
                         {/* Image */}
-                        <div className="w-24 h-24 shrink-0 bg-[#f4f4f4] flex items-center justify-center overflow-hidden mr-4 md:mr-6 shadow-sm border border-black/5">
+                        <div className="w-20 h-20 md:w-24 md:h-24 shrink-0 bg-[#f4f4f4] flex items-center justify-center overflow-hidden mr-4 md:mr-6 shadow-sm border border-black/5 self-center">
                            {item.coverImage ? (
                               <img src={item.coverImage || undefined} className="w-full h-full object-cover" alt="" />
                            ) : (
@@ -413,51 +438,65 @@ export function ChartsView({ gameState, onClose }: ChartsViewProps) {
                                  {isAlbumChart ? (
                                     <span className="font-bold text-black/50 text-[10px] tracking-tight text-center uppercase">billboard</span>
                                  ) : (
-                                    <Music2 className="w-8 h-8 text-black/30" strokeWidth={1} />
+                                    <Music2 className="w-8 h-8 text-black/20" strokeWidth={1} />
                                  )}
                               </div>
                            )}
                         </div>
 
-                        {/* Info */}
-                        <div className="flex-1 flex flex-col justify-start min-w-0 pr-2 pt-1">
-                           <h3 className="font-extrabold text-lg md:text-xl truncate leading-tight text-black mb-1 uppercase tracking-tight">{item.title}</h3>
-                           <p className="font-medium text-gray-600 text-sm truncate uppercase tracking-tight mb-0.5">{item.artist}</p>
-                           <p className="font-medium text-gray-400 text-[10px] truncate uppercase tracking-tight mb-3">{label}</p>
+                        {/* Title and Artist Info */}
+                        <div className="flex-1 flex flex-col justify-center min-w-0 pr-2">
+                           <h3 className={`font-black text-lg md:text-xl truncate leading-tight text-black mb-0.5 tracking-tight ${isFirst ? 'md:text-2xl' : ''}`}>{item.title}</h3>
+                           <p className="font-medium text-gray-500 text-sm truncate tracking-tight mb-0.5">{item.artist}</p>
+                           <p className="font-bold text-gray-400 text-[9px] truncate uppercase tracking-widest">{label}</p>
                            
-                           {isAlbumChart ? (
-                              <div className="flex items-center gap-6 mt-0">
-                                 <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">ACTIVITY</span>
-                                    <span className="text-sm md:text-base text-black font-bold tracking-tight">{formatStat(item.activity || 0)}</span>
-                                 </div>
-                                 <div className="flex flex-col">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">ALBUMS</span>
-                                    <span className="text-sm md:text-base text-black font-bold tracking-tight">{formatStat(item.albums || 0)}</span>
-                                 </div>
-                              </div>
-                           ) : (
-                              <div className="flex items-center gap-3 text-[10px] md:text-xs text-gray-500 font-medium tracking-wide whitespace-nowrap overflow-x-auto hide-scrollbar pt-1">
-                                 <span>LW <span className="text-black font-bold ml-1">{item.lastPos}</span></span>
-                                 <span className="text-gray-300">-</span>
-                                 <span>PEAK <span className="text-black font-bold ml-1">{item.peakPos}</span></span>
-                                 <span className="text-gray-300">-</span>
-                                 <span>WEEKS <span className="text-black font-bold ml-1">{item.weeksOnChart}</span></span>
-                              </div>
-                           )}
+                           {/* Mobile version of stats bottom row */}
+                           <div className="flex md:hidden mt-3">
+                              {isAlbumChart ? (
+                                  <div className="flex flex-row items-center gap-4 text-xs">
+                                     <span className="font-bold text-black border-r border-gray-300 pr-4">Act: <span className="text-gray-600">{formatStat(item.activity || 0)}</span></span>
+                                     <span className="font-bold text-black">Albs: <span className="text-gray-600">{formatStat(item.albums || 0)}</span></span>
+                                  </div>
+                              ) : (
+                                  <div className="flex items-center gap-4 text-[10px] font-bold text-gray-500 tracking-wider">
+                                     <span>LW <span className="text-black ml-0.5 text-xs">{item.lastPos === '-' ? '-' : item.lastPos}</span></span>
+                                     <span>PK <span className="text-black ml-0.5 text-xs">{item.peakPos}</span></span>
+                                     <span>WKS <span className="text-black ml-0.5 text-xs">{item.weeksOnChart}</span></span>
+                                  </div>
+                              )}
+                           </div>
                         </div>
                         
-                        {/* Actions */}
-                        {!isAlbumChart && (
-                            <div className="flex items-center gap-3 shrink-0 pl-2 self-center">
-                               <button className={`w-8 h-8 flex items-center justify-center rounded-full border border-gray-400 hover:bg-gray-100 transition-colors ${isPlayer ? 'bg-black border-black hover:bg-gray-800' : ''}`}>
-                                  <Star className={`w-4 h-4 ${isPlayer ? 'text-white fill-white' : 'text-gray-600'}`} strokeWidth={isPlayer ? 0 : 1.5} />
-                               </button>
-                               <button className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-400 hover:bg-gray-100 transition-colors hidden md:flex">
-                                  <Plus className="w-4 h-4 text-gray-600" strokeWidth={1.5} />
-                               </button>
-                            </div>
-                        )}
+                        {/* Desktop Data Columns */}
+                        <div className="hidden md:flex items-center">
+                           {isAlbumChart ? (
+                              <div className="flex items-center font-bold text-base tracking-tight text-black">
+                                 <div className="w-24 text-right">{formatStat(item.activity || 0)}</div>
+                                 <div className="w-24 text-right ml-6">{formatStat(item.albums || 0)}</div>
+                              </div>
+                           ) : (
+                              <div className="flex items-center font-bold text-xl tracking-tighter text-black">
+                                 <div className="w-14 text-center flex justify-center items-center">
+                                    <span className="text-gray-400 w-full">{item.lastPos === '-' ? '-' : item.lastPos}</span>
+                                 </div>
+                                 <div className="w-14 text-center ml-6 flex justify-center items-center">
+                                    <span className="text-black w-full">{item.peakPos}</span>
+                                 </div>
+                                 <div className="w-14 text-center ml-6 flex justify-center items-center">
+                                    <span className="text-gray-400 w-full">{item.weeksOnChart}</span>
+                                 </div>
+                              </div>
+                           )}
+                           
+                           {/* Action button */}
+                           <div className="flex items-center justify-end w-12 ml-4">
+                              {isPlayer && (
+                                 <button className="w-8 h-8 flex items-center justify-center rounded-full bg-black hover:bg-gray-800 transition-colors">
+                                    <Star className="w-4 h-4 text-white fill-white" strokeWidth={0} />
+                                 </button>
+                              )}
+                           </div>
+                        </div>
                      </div>
                    );
                 })}

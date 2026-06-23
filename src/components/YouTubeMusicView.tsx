@@ -117,7 +117,7 @@ export function YouTubeMusicView({ gameState }: YouTubeMusicViewProps) {
         let dailyStreams = 0;
         const npcRels = gameState.releases.filter(r => r.status === 'Published' && (r as any).artistId === artistId);
         npcRels.forEach(r => dailyStreams += (r.lastDailyStreams?.total || 0));
-        return Math.floor(dailyStreams * 8.5) || Math.floor(Math.random() * 5000000 + 1000000);
+        return Math.floor(dailyStreams * 8.5) || Math.floor((artistId.charCodeAt(0) * 50000) + 1000000);
     };
 
     const getSubscribers = () => {
@@ -269,7 +269,7 @@ export function YouTubeMusicView({ gameState }: YouTubeMusicViewProps) {
                             <span className="font-bold text-center">Your Likes</span>
                             <span className="text-xs text-white/50 text-center">Music you've liked</span>
                         </div>
-                        {NPC_ARTISTS.slice(0, 3).map((npc, i) => (
+                        {NPC_ARTISTS.filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()).slice(0, 3).map((npc, i) => (
                             <div key={npc.name} onClick={() => { setViewArtist(npc.name); setYoutubeMusicTab('profile'); }} className="min-w-[160px] bg-white/5 rounded-xl flex flex-col gap-2 cursor-pointer hover:bg-white/10 transition-colors overflow-hidden group">
                                 <div className="h-24 bg-[#212121] overflow-hidden">
                                      {ARTIST_IMAGES[npc.name as keyof typeof ARTIST_IMAGES] || ARTIST_PICS[npc.name as keyof typeof ARTIST_PICS] ? (
@@ -382,7 +382,7 @@ export function YouTubeMusicView({ gameState }: YouTubeMusicViewProps) {
 
                     <h2 className="text-2xl font-bold mb-4">Community Playlists</h2>
                     <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-8 snap-x">
-                        {[...NPC_ARTISTS].reverse().slice(0, 6).map((npc, i) => (
+                        {[...NPC_ARTISTS].filter(n => !gameState.artist?.name || n.name.toLowerCase() !== gameState.artist.name.toLowerCase()).reverse().slice(0, 6).map((npc, i) => (
                             <div key={`playlist-${i}`} onClick={() => { setViewArtist(npc.name); setYoutubeMusicTab('profile'); }} className="flex flex-col w-[160px] md:w-[200px] snap-start shrink-0 group cursor-pointer">
                                 <div className="w-full aspect-square bg-[#212121] rounded-xl overflow-hidden relative mb-3 border border-white/10">
                                     <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
@@ -682,7 +682,7 @@ export function YouTubeMusicView({ gameState }: YouTubeMusicViewProps) {
             )}
 
             {/* Bottom Navigation */}
-            <div className="fixed bottom-0 left-0 right-0 h-20 bg-[#030303]/90 backdrop-blur-md border-t border-white/10 z-[300] flex justify-around items-center px-4 md:px-24">
+            <div className="fixed bottom-[72px] left-0 right-0 h-20 bg-[#030303]/90 backdrop-blur-md border-t border-white/10 z-[300] flex justify-around items-center px-4 md:px-24">
                <button 
                   onClick={() => { setYoutubeMusicChart(null); setYoutubeMusicTab('home'); setViewArtist(null); }} 
                   className={`flex flex-col items-center justify-center w-24 gap-1 ${youtubeMusicTab === 'home' ? 'text-white' : 'text-white/40 hover:text-white/60'}`}

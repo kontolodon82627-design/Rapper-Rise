@@ -25,6 +25,7 @@ import { SpotifyWrappedView } from './components/SpotifyWrappedView';
 import { TikTokView } from './components/TikTokView';
 import { processTikTokDaily } from './tiktokUtils';
 import { LabelsView } from './components/LabelsView';
+import { generateDailyNews } from './newsGenerator';
 
 import { TourView } from './components/TourView';
 
@@ -293,14 +294,18 @@ export default function App() {
       // Daily NPC scheduling check
       if (gameState.time.daysPassed > 0) {
          NPC_ARTISTS.forEach(npc => {
+            if (gameState.artist?.name && npc.name.toLowerCase() === gameState.artist.name.toLowerCase()) return;
             // Each NPC decides to start an album/single cycle once every 365 days based on their name
             const npcDayOffset = (npc.name.charCodeAt(0) * 17 + (npc.name.charCodeAt(1) || 0) * 31) % 365;
             if (gameState.time.daysPassed % 365 !== npcDayOffset) return;
 
             const currentYearCycle = Math.floor(gameState.time.daysPassed / 365);
             const disco = (ARTIST_DISCOGRAPHY as any) || {};
-            const albumsList = disco[npc.name]?.albums || [];
-            if (albumsList.length === 0) return;
+            let albumsList = disco[npc.name]?.albums || [];
+            
+            if (albumsList.length === 0) {
+                return;
+            }
             
             // Delete oldest releases to maintain history size (max 5 albums per NPC)
             const npcRels = workingReleases.filter(r => (r as any).isNPCRelease && (r as any).artistId === npc.name);
@@ -324,35 +329,75 @@ export default function App() {
                 const daysUntilRelease = [8, 14, 21, 30, 45, 60][Math.floor(Math.random() * 6)];
                 baseDate.setDate(baseDate.getDate() + daysUntilRelease);
 
-                const npcPublishedAlbumTitles = npcRels.map(r => r.title);
-                const unusedAlbums = albumsList.filter((a: any) => !npcPublishedAlbumTitles.includes(a.title));
+                const npcPublishedTitles = npcRels.map(r => r.title);
+                const unusedAlbums = albumsList.filter((a: any) => {
+                    const cleanTitle = a.title.replace(/ - Single$/i, '').replace(/ - EP$/i, ' EP');
+                    return !npcPublishedTitles.includes(cleanTitle) && !npcPublishedTitles.includes(a.title);
+                });
                 
-                let albumDisco;
                 let randomAlbumIdx = 0;
+                let albumDisco: any = null;
                 if (unusedAlbums.length > 0) {
                     const rnd = Math.floor(Math.random() * unusedAlbums.length);
-                    albumDisco = unusedAlbums[rnd];
-                    randomAlbumIdx = albumsList.findIndex((a: any) => a.title === albumDisco.title);
+                    randomAlbumIdx = albumsList.findIndex((a: any) => a.title === unusedAlbums[rnd].title);
+                    albumDisco = { ...albumsList[randomAlbumIdx] };
                 } else {
                     randomAlbumIdx = Math.floor(Math.random() * albumsList.length);
-                    albumDisco = { ...albumsList[randomAlbumIdx] };
-                    albumDisco.title = `${albumDisco.title} (${currentYearCycle + 1} Edition)`;
+                    albumDisco = { ...albumsList[randomAlbumIdx], isReRelease: true };
                 }
-
+                
+                if (albumDisco.isReRelease) {
+                    const oldAlbum = workingReleases.find(r => r.title === albumDisco.title && (r as any).artistId === npc.name && ['Album', 'EP', 'Single Pack'].includes(r.type));
+                    if (oldAlbum) {
+                        workingReleases = workingReleases.filter(r => r.id !== oldAlbum.id && !(oldAlbum as any).trackIds?.includes(r.id));
+                    }
+                }
+                
                 let albumTracks = [];
                 if (disco[npc.name]?.tracks && disco[npc.name]?.tracks.length > 0) {
-                    albumTracks = disco[npc.name].tracks.filter((t: any) => t.cover === albumDisco.cover);
+                    albumTracks = disco[npc.name].tracks.filter((t: any) => t.album === albumDisco.title || (t.album && albumDisco.title && t.album.toLowerCase().includes(albumDisco.title.toLowerCase())));
+                    if (albumTracks.length === 0) {
+                         albumTracks = disco[npc.name].tracks.filter((t: any) => t.cover === albumDisco.cover);
+                    }
                     if (albumTracks.length === 0) {
                          albumTracks = disco[npc.name].tracks.slice(randomAlbumIdx * 10, (randomAlbumIdx + 1) * 10);
                     }
                     if (albumTracks.length === 0) {
                         albumTracks = [disco[npc.name].tracks[0]];
                     }
+                } else {
+                    albumTracks = Array(10).fill(null).map((_, i) => ({
+                         title: `${albumDisco.title} - Track ${i+1}`,
+                         cover: albumDisco.cover
+                    }));
+                }
+
+                let albType = 'Album';
+                if (albumDisco.title) {
+                    if (albumDisco.title.match(/ - Single$/i)) albType = 'Single Pack';
+                    else if (albumDisco.title.match(/ - EP$/i)) albType = 'EP';
+                    albumDisco.title = albumDisco.title.replace(/ - Single$/i, '').replace(/ - EP$/i, ' EP');
                 }
 
                 if (isSingleOnlyYear) {
                      // Schedule a standalone single
-                     const track = albumTracks[Math.floor(Math.random() * albumTracks.length)] || { title: `Single ${currentYearCycle}-${j}`, cover: albumDisco?.cover };
+                     const npcPublishedTitlesForSingles = npcRels.map(r => r.title);
+                     let allTracks = disco[npc.name]?.tracks || [];
+                     let unusedTracks = allTracks.filter((t: any) => !npcPublishedTitlesForSingles.includes(t.title));
+                     let track;
+                     if (unusedTracks.length > 0) {
+                        track = unusedTracks[Math.floor(Math.random() * unusedTracks.length)];
+                     } else {
+                        if (allTracks.length === 0) {
+                           track = { title: `Single ${currentYearCycle}-${j}`, cover: albumDisco?.cover };
+                        } else {
+                           track = { ...allTracks[Math.floor(Math.random() * allTracks.length)], isReRelease: true };
+                        }
+                     }
+                     
+                     if (track.isReRelease) {
+                        workingReleases = workingReleases.filter(r => !(r.title === track.title && (r as any).artistId === npc.name));
+                     }
                      
                      let title = track.title;
                      let collaborator = undefined;
@@ -377,7 +422,7 @@ export default function App() {
                      workingReleases.push({
                         id: `npc-${npc.name}-singleonly-${currentYearCycle}-${j}`,
                         title: title,
-                        coverImage: track.cover || albumDisco?.cover || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`,
+                        coverImage: track?.cover || albumDisco?.cover || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`,
                         artistId: npc.name,
                         collaborator: collaborator,
                         isNPCCollab,
@@ -418,10 +463,10 @@ export default function App() {
                      workingReleases.push({
                          id: albumId,
                          title: albumDisco.title,
-                         coverImage: albumDisco.cover || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`,
+                         coverImage: albumDisco.cover || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`,
                          artistId: npc.name,
                          isNPCRelease: true,
-                         type: 'Album',
+                         type: albType as any,
                          status: 'Scheduled',
                          releaseDate: albumDate.toISOString(),
                          trackIds,
@@ -463,7 +508,7 @@ export default function App() {
                          workingReleases.push({
                              id: trackIds[i],
                              title: title,
-                             coverImage: track.cover || albumDisco.cover || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`,
+                             coverImage: albumDisco?.cover || track.cover || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`,
                              artistId: npc.name,
                              collaborator,
                              isNPCCollab,
@@ -505,9 +550,9 @@ export default function App() {
                    const albId = r.id;
                    const releasedSingles = (gameState.releases || []).filter(sl => sl.type === 'Single' && sl.status === 'Published' && (r as Album).trackIds?.includes(sl.id));
                    for (const s of releasedSingles) {
-                       if (s.trend === 'Mega Hit') leadSingleHypeMux = Math.max(leadSingleHypeMux, 3.5);
-                       else if (s.trend === 'Hit') leadSingleHypeMux = Math.max(leadSingleHypeMux, 2.0);
-                       else if (s.trend === 'Viral') leadSingleHypeMux = Math.max(leadSingleHypeMux, 1.5);
+                       if (s.trend?.includes('Mega Hit')) leadSingleHypeMux = Math.max(leadSingleHypeMux, 3.5);
+                       else if (s.trend?.includes('Hit')) leadSingleHypeMux = Math.max(leadSingleHypeMux, 2.0);
+                       else if (s.trend === 'TikTok Trend' || s.trend === 'Viral') leadSingleHypeMux = Math.max(leadSingleHypeMux, 1.5);
                    }
                }
                
@@ -540,10 +585,15 @@ export default function App() {
       });
 
       // Find all tracks in Published albums
-      const publishedAlbumTracks = new Map<string, { date: string, cover?: string }>(); // trackId -> album info
+      const publishedAlbumTracks = new Map<string, { date: string, cover?: string, trackNum: number, isSleeperHit: boolean }>(); // trackId -> album info
       workingReleases.forEach(r => {
          if (['Album', 'EP', 'Single Pack', 'Deluxe Album'].includes(r.type) && r.status === 'Published' && r.releaseDate) {
-            ((r as Album).trackIds || []).forEach(id => publishedAlbumTracks.set(id, { date: r.releaseDate!, cover: r.coverImage }));
+            const tracks = (r as Album).trackIds || [];
+            tracks.forEach((id, index) => {
+               // Roughly 1 in 8 late-album tracks becomes a random fan favorite sleeper hit
+               const isSleeper = index > 2 && Math.random() < 0.15;
+               publishedAlbumTracks.set(id, { date: r.releaseDate!, cover: r.coverImage, trackNum: index + 1, isSleeperHit: isSleeper });
+            });
          }
       });
 
@@ -559,6 +609,12 @@ export default function App() {
                  updates.status = 'Published';
                  updates.releaseDate = albumInfo.date || currentDateObj.toISOString();
                  updates.isBSide = true;
+                 modified = true;
+              }
+              
+              if ((r as Song).albumTrackNumber === undefined) {
+                 updates.albumTrackNumber = albumInfo.trackNum;
+                 updates.isSleeperHit = albumInfo.isSleeperHit;
                  modified = true;
               }
 
@@ -585,8 +641,12 @@ export default function App() {
                  const exists = updatedTikTok.sounds?.find((s: any) => s.songId === r.id);
                  if (!exists) {
                      let startingTrend = 'Non Trend';
-                     if (r.trend === 'Hit') startingTrend = 'Hits';
-                     else if (r.trend === 'Mega Hit') startingTrend = 'Mega Hits';
+                     if (r.trend?.includes('Mega Hit')) {
+                        startingTrend = r.trend.includes('Big') ? 'Mega Hits Big' : r.trend.includes('Medium') ? 'Mega Hits Medium' : 'Mega Hits';
+                     }
+                     else if (r.trend?.includes('Hit')) {
+                        startingTrend = r.trend.includes('Big') ? 'Hits Big' : r.trend.includes('Medium') ? 'Hits Medium' : 'Hits';
+                     }
                      else if (r.trend === 'TikTok Trend') startingTrend = 'TikTok Trend';
 
                      updatedTikTok.sounds?.push({
@@ -647,31 +707,65 @@ export default function App() {
             
             // Introduce more variance for normal songs so they don't all get the same streams
             let hitMultiplier = 0.4 + (intrinsicHitFactor * 0.8); // 0.4 to 1.2 for normal songs
-            let currentTrend: 'Flop' | 'Non-Hit' | 'TikTok Trend' | 'Hit' | 'Mega Hit' = 'Non-Hit';
+            let currentTrend: any = 'Non-Hit';
 
-            // Mega Hit: strict requirement of incredibly high luck roll (~0.3% chance) and high intrinsic value
-            let isMegaHit = baseHitFactor >= 0.997 && intrinsicHitFactor >= 0.95;
-            let isHit = !isMegaHit && intrinsicHitFactor > 0.85;
+            // Tier Definitions
+            let isMegaHitBig = baseHitFactor >= 0.999 && intrinsicHitFactor >= 0.98;
+            let isMegaHitMedium = !isMegaHitBig && baseHitFactor >= 0.998 && intrinsicHitFactor >= 0.96;
+            let isMegaHit = !isMegaHitBig && !isMegaHitMedium && baseHitFactor >= 0.996 && intrinsicHitFactor >= 0.94;
+            
+            let isHitBig = !isMegaHitBig && !isMegaHitMedium && !isMegaHit && baseHitFactor >= 0.97 && intrinsicHitFactor >= 0.91;
+            let isHitMedium = !isHitBig && !isMegaHitBig && !isMegaHitMedium && !isMegaHit && baseHitFactor >= 0.92 && intrinsicHitFactor >= 0.88;
+            let isHit = !isHitBig && !isHitMedium && !isMegaHitBig && !isMegaHitMedium && !isMegaHit && baseHitFactor >= 0.85 && intrinsicHitFactor > 0.85;
+
+            let isNonHitBig = !isHit && !isHitMedium && !isHitBig && !isMegaHit && !isMegaHitMedium && !isMegaHitBig && intrinsicHitFactor >= 0.75;
+            let isNonHitMedium = !isNonHitBig && !isHit && !isHitMedium && !isHitBig && !isMegaHit && !isMegaHitMedium && !isMegaHitBig && intrinsicHitFactor >= 0.50;
 
             // TikTok Overrides
             const tkSound = updatedTikTok?.sounds.find(s => s.songId === release.id);
             if (tkSound) {
-                if (tkSound.trendingStatus === 'Mega Hits') isMegaHit = true;
+                if (tkSound.trendingStatus === 'Mega Hits Big') isMegaHitBig = true;
+                else if (tkSound.trendingStatus === 'Mega Hits Medium') isMegaHitMedium = true;
+                else if (tkSound.trendingStatus === 'Mega Hits') isMegaHit = true;
+                else if (tkSound.trendingStatus === 'Hits Big') isHitBig = true;
+                else if (tkSound.trendingStatus === 'Hits Medium') isHitMedium = true;
                 else if (tkSound.trendingStatus === 'Hits') isHit = true;
+                else if (tkSound.trendingStatus === 'Non Trend Big') isNonHitBig = true;
+                else if (tkSound.trendingStatus === 'Non Trend Medium') isNonHitMedium = true;
             }
 
-            if (isMegaHit) {
-                hitMultiplier = Math.max(hitMultiplier, 3.5 + (intrinsicHitFactor * 2)); // Massive hit
+            if (isMegaHitBig) {
+                hitMultiplier = Math.max(hitMultiplier, 5.0 + (intrinsicHitFactor * 3.0));
+                currentTrend = 'Mega Hit Big';
+            } else if (isMegaHitMedium) {
+                hitMultiplier = Math.max(hitMultiplier, 4.2 + (intrinsicHitFactor * 2.5));
+                currentTrend = 'Mega Hit Medium';
+            } else if (isMegaHit) {
+                hitMultiplier = Math.max(hitMultiplier, 3.5 + (intrinsicHitFactor * 2.0));
                 currentTrend = 'Mega Hit';
+            } else if (isHitBig) {
+                hitMultiplier = Math.max(hitMultiplier, 2.7 + (intrinsicHitFactor * 1.5));
+                currentTrend = 'Hit Big';
+            } else if (isHitMedium) {
+                hitMultiplier = Math.max(hitMultiplier, 2.3 + (intrinsicHitFactor * 1.2));
+                currentTrend = 'Hit Medium';
             } else if (isHit) {
-                hitMultiplier = Math.max(hitMultiplier, 2.0 + (intrinsicHitFactor)); // Big hit
+                hitMultiplier = Math.max(hitMultiplier, 2.0 + (intrinsicHitFactor * 1.0));
                 currentTrend = 'Hit';
             } else if (tkSound?.trendingStatus === 'TikTok Trend') {
-                hitMultiplier = Math.max(hitMultiplier, 1.5 + (intrinsicHitFactor * 0.5)); // Mild hit
+                hitMultiplier = Math.max(hitMultiplier, 1.5 + (intrinsicHitFactor * 0.5));
                 currentTrend = 'TikTok Trend';
+            } else if (isNonHitBig) {
+                hitMultiplier = Math.max(hitMultiplier, 1.3 + (intrinsicHitFactor * 0.4));
+                currentTrend = 'Non-Hit Big';
+            } else if (isNonHitMedium) {
+                hitMultiplier = Math.max(hitMultiplier, 0.9 + (intrinsicHitFactor * 0.4));
+                currentTrend = 'Non-Hit Medium';
             } else if (intrinsicHitFactor < 0.15) {
                 hitMultiplier = 0.2 + (intrinsicHitFactor); // Flop
                 currentTrend = 'Flop';
+            } else {
+                currentTrend = 'Non-Hit';
             }
 
             let isBSide = false;
@@ -679,22 +773,58 @@ export default function App() {
                isBSide = true;
                
                const bSideViralChance = (hash % 100) / 100; // 0 to 0.99
-               // Nerf: Only ~10% chance for a B-side to remain a Mega Hit, and ~20% for a Hit
-               if (isMegaHit && bSideViralChance > 0.90) {
-                   hitMultiplier = Math.max(hitMultiplier, 3.5 + (intrinsicHitFactor * 2)); 
+               // Nerf: B-Sides are much harder to become hits depending on their tier
+               if (isMegaHitBig && bSideViralChance > 0.96) {
+                   hitMultiplier = Math.max(hitMultiplier, 5.0 + (intrinsicHitFactor * 3.0)); 
+                   currentTrend = 'Mega Hit Big';
+               } else if (isMegaHitMedium && bSideViralChance > 0.94) {
+                   hitMultiplier = Math.max(hitMultiplier, 4.2 + (intrinsicHitFactor * 2.5)); 
+                   currentTrend = 'Mega Hit Medium';
+               } else if (isMegaHit && bSideViralChance > 0.90) {
+                   hitMultiplier = Math.max(hitMultiplier, 3.5 + (intrinsicHitFactor * 2.0)); 
                    currentTrend = 'Mega Hit';
+               } else if (isHitBig && bSideViralChance > 0.86) {
+                   hitMultiplier = Math.max(hitMultiplier, 2.7 + (intrinsicHitFactor * 1.5)); 
+                   currentTrend = 'Hit Big';
+               } else if (isHitMedium && bSideViralChance > 0.83) {
+                   hitMultiplier = Math.max(hitMultiplier, 2.3 + (intrinsicHitFactor * 1.2)); 
+                   currentTrend = 'Hit Medium';
                } else if (isHit && bSideViralChance > 0.80) {
-                   hitMultiplier = Math.max(hitMultiplier, 2.0 + (intrinsicHitFactor)); 
+                   hitMultiplier = Math.max(hitMultiplier, 2.0 + (intrinsicHitFactor * 1.0)); 
                    currentTrend = 'Hit';
                } else if (tkSound?.trendingStatus === 'TikTok Trend' && bSideViralChance > 0.60) {
                    hitMultiplier = Math.max(hitMultiplier, 1.5 + (intrinsicHitFactor * 0.5));
                    currentTrend = 'TikTok Trend';
+               } else if (isNonHitBig && bSideViralChance > 0.50) {
+                   hitMultiplier = Math.max(hitMultiplier, 1.3 + (intrinsicHitFactor * 0.4));
+                   currentTrend = 'Non-Hit Big';
+               } else if (isNonHitMedium && bSideViralChance > 0.30) {
+                   hitMultiplier = Math.max(hitMultiplier, 0.9 + (intrinsicHitFactor * 0.4));
+                   currentTrend = 'Non-Hit Medium';
                } else if (intrinsicHitFactor < 0.15) {
                    hitMultiplier = 0.2 * 0.15;
                    currentTrend = 'Flop';
                } else {
-                   hitMultiplier *= 0.15; // Normal B-side nerf
-                   currentTrend = tkSound?.trendingStatus === 'TikTok Trend' ? 'TikTok Trend' : 'Non-Hit';
+                   let cascadeModifier = 0.15;
+                   const trackNum = isSong && (release as Song).albumTrackNumber ? (release as Song).albumTrackNumber! : 10;
+                   const isSleeper = isSong && (release as Song).isSleeperHit;
+                   
+                   if (isSleeper) {
+                        cascadeModifier = 0.55; // High visibility fan favorite
+                        currentTrend = 'Non-Hit Big';
+                   } else if (trackNum === 1) {
+                        cascadeModifier = 0.40; // Huge focus front-loaded
+                   } else if (trackNum === 2 || trackNum === 3) {
+                        cascadeModifier = 0.28; // Upper tracklist
+                   } else {
+                        // Severe deep-cut decay cascade based on how deep the track is
+                        cascadeModifier = Math.max(0.04, 0.18 - ((trackNum - 4) * 0.02));
+                   }
+                   
+                   hitMultiplier *= cascadeModifier; 
+                   if (currentTrend === 'Non-Hit' || currentTrend === 'Flop') {
+                       currentTrend = tkSound?.trendingStatus === 'TikTok Trend' ? 'TikTok Trend' : 'Non-Hit';
+                   }
                }
             }
 
@@ -705,9 +835,13 @@ export default function App() {
             if (updatedTikTok) {
                 const tkSoundSync = updatedTikTok.sounds.find((s: any) => s.songId === release.id);
                 if (tkSoundSync) {
-                    if (currentTrend === 'Mega Hit' && tkSoundSync.trendingStatus !== 'Mega Hits') tkSoundSync.trendingStatus = 'Mega Hits';
-                    else if (currentTrend === 'Hit' && !['Mega Hits', 'Hits'].includes(tkSoundSync.trendingStatus)) tkSoundSync.trendingStatus = 'Hits';
-                    else if (currentTrend === 'TikTok Trend' && tkSoundSync.trendingStatus === 'Non Trend') tkSoundSync.trendingStatus = 'TikTok Trend';
+                    if (currentTrend === 'Mega Hit Big' && tkSoundSync.trendingStatus !== 'Mega Hits Big') tkSoundSync.trendingStatus = 'Mega Hits Big';
+                    else if (currentTrend === 'Mega Hit Medium' && tkSoundSync.trendingStatus !== 'Mega Hits Medium') tkSoundSync.trendingStatus = 'Mega Hits Medium';
+                    else if (currentTrend === 'Mega Hit' && tkSoundSync.trendingStatus !== 'Mega Hits') tkSoundSync.trendingStatus = 'Mega Hits';
+                    else if (currentTrend === 'Hit Big' && !['Mega Hits Big', 'Mega Hits Medium', 'Mega Hits', 'Hits Big'].includes(tkSoundSync.trendingStatus)) tkSoundSync.trendingStatus = 'Hits Big';
+                    else if (currentTrend === 'Hit Medium' && !['Mega Hits Big', 'Mega Hits Medium', 'Mega Hits', 'Hits Big', 'Hits Medium'].includes(tkSoundSync.trendingStatus)) tkSoundSync.trendingStatus = 'Hits Medium';
+                    else if (currentTrend === 'Hit' && !['Mega Hits Big', 'Mega Hits Medium', 'Mega Hits', 'Hits Big', 'Hits Medium', 'Hits'].includes(tkSoundSync.trendingStatus)) tkSoundSync.trendingStatus = 'Hits';
+                    else if (currentTrend === 'TikTok Trend' && ['Non Trend', 'Non Trend Medium', 'Non Trend Big'].includes(tkSoundSync.trendingStatus)) tkSoundSync.trendingStatus = 'TikTok Trend';
                 }
             }
 
@@ -730,8 +864,15 @@ export default function App() {
                const debutCurve = Math.exp(-(daysSinceRelease) / 7); 
                
                let debutMultiplier = fandomPower * debutCurve;
-               if (isBSide && currentTrend !== 'Mega Hit' && currentTrend !== 'Hit') {
-                   // B-sides get a smaller debut push
+
+               if (currentTrend === 'Flop' || currentTrend.includes('Non-Hit')) {
+                   debutMultiplier *= 0.2; // NERF: Non-Hits have a much weaker debut
+               } else if (currentTrend.includes('Hit') && !currentTrend.includes('Mega')) {
+                   debutMultiplier *= 0.45; // NERF: Hits have a balanced debut, keeping Mega Hits massive
+               }
+
+               if (isBSide && !currentTrend.includes('Hit')) {
+                   // B-sides get a smaller debut push unless they are a Hit version
                    debutMultiplier *= (isNPC ? 0.2 : 0.4);
                }
                initialHypeCurve *= Math.max(1, debutMultiplier);
@@ -740,7 +881,7 @@ export default function App() {
             // 3. Catalog Tail (Slow burn)
             // Reduced to prevent old songs from being too overpowered
             const tailHalfLife = (150 + (effectiveLevel * 20)) * longevityMultiplier; 
-            const catalogBase = isBSide && (currentTrend === 'Non-Hit' || currentTrend === 'Flop') ? 0.002 : 0.015; 
+            const catalogBase = isBSide && (currentTrend.includes('Non-Hit') || currentTrend === 'Flop') ? 0.002 : 0.015; 
             const tailCurve = catalogBase * Math.exp(-daysSinceRelease / tailHalfLife);
             
             let decayFactor = initialHypeCurve + secondaryCurve + tailCurve;
@@ -749,15 +890,27 @@ export default function App() {
             // Prevents massive artists from dropping to zero, giving a realistic floor
             let floorPercentage = effectiveLevel >= 10 ? 0.015 + (intrinsicHitFactor * 0.015) : (effectiveLevel * 0.0015); 
             
-            // Cap the floor for non-Mega Hits to ensure Hits settle < 1M streams realistically
-            if (currentTrend === 'Hit') {
-               floorPercentage = Math.min(floorPercentage, 0.002); 
-            } else if (currentTrend !== 'Mega Hit') {
-               floorPercentage = Math.min(floorPercentage, 0.0008);
+            // Cap the floor based on tier
+            if (currentTrend === 'Mega Hit Big') {
+               floorPercentage = Math.min(floorPercentage, 0.005);
+            } else if (currentTrend.includes('Mega Hit')) {
+               floorPercentage = Math.min(floorPercentage, 0.0035);
+            } else if (currentTrend === 'Hit Big') {
+               floorPercentage = Math.min(floorPercentage, 0.0025);
+            } else if (currentTrend === 'Hit Medium') {
+               floorPercentage = Math.min(floorPercentage, 0.0020);
+            } else if (currentTrend === 'Hit') {
+               floorPercentage = Math.min(floorPercentage, 0.0015);
+            } else if (currentTrend.includes('Non-Hit Big')) {
+               floorPercentage = Math.min(floorPercentage, 0.001);
+            } else if (currentTrend.includes('Non-Hit Medium')) {
+               floorPercentage = Math.min(floorPercentage, 0.0006);
+            } else {
+               floorPercentage = Math.min(floorPercentage, 0.0003);
             }
             
             // Significant Nerf for B-Sides: Very low floor unless it's a hit
-            if (isBSide && (currentTrend === 'Non-Hit' || currentTrend === 'Flop')) {
+            if (isBSide && (currentTrend.includes('Non-Hit') || currentTrend === 'Flop')) {
                 floorPercentage *= 0.15; // Raised from 0.02 to avoid dropping to hundreds of streams
             }
 
@@ -771,7 +924,7 @@ export default function App() {
             const radioCurve = Math.exp(-(distance * distance) / (radioWidth * radioWidth));
             
             const radioMaxHit = hitMultiplier * qualityMod * (1 + artistLevel * 0.2);
-            let dailyRadio = (isBSide && (currentTrend === 'Non-Hit' || currentTrend === 'Flop'))
+            let dailyRadio = (isBSide && (currentTrend.includes('Non-Hit') || currentTrend === 'Flop'))
                 ? 0 // Normal B-sides get no radio
                 : Math.floor(radioCurve * radioMaxHit * 10 * popBoost * (Math.random() * 0.4 + 0.8));
 
@@ -815,27 +968,81 @@ export default function App() {
                 smoothFluctuation *
                 weekendBoost;
 
-            if (!isSong) {
-                // Albums themselves don't generate massive standalone "pseudo streams" because the sum of tracks usually defines it.
-                // But for gameplay simplicity on the backend, we assign the album a "bundled stream value" that is roughly sum of tracks.
-                // We assume an album has ~10 tracks. Lead single (1x), B-sides (9 * 0.15 = 1.35x). Total = 2.35x of a single.
-                rawStreamsTotal *= 2.35;
-            }
-
             // Apply global softcap log function based on hitMultiplier to allow massive hits to scale farther
             const softCapThreshold = 10000000 + (hitMultiplier * 4000000);
             if (rawStreamsTotal > softCapThreshold) {
                  rawStreamsTotal = softCapThreshold + Math.pow(rawStreamsTotal - softCapThreshold, 0.68 + (hitMultiplier * 0.02)); 
             }
             
-            // SUPERSTAR CATALOG FLOOR:
-            // Prevents old songs from dying completely, but now scales with song popularity/identity
-            const globalPopForFloor = Math.max(1, totalPop);
-            // Apply hitMultiplier and B-side penalty to the legacy stream floor to give songs individual identities
-            const legacyIdentityMultiplier = (hitMultiplier * 0.5) * (isBSide ? 0.15 : 1.0); 
-            const superstarHardFloor = isSong ? Math.floor((globalPopForFloor / 100) * effectiveLevel * 250 * Math.max(0.2, legacyIdentityMultiplier)) : Math.floor((globalPopForFloor / 100) * effectiveLevel * 750); 
-            if (rawStreamsTotal < superstarHardFloor && daysSinceRelease > 14) { 
-                rawStreamsTotal = Math.max(rawStreamsTotal, superstarHardFloor * (Math.random() * 0.2 + 0.9));
+            // SUPERSTAR CATALOG FLOOR (Dynamic Target Based on User Logic)
+            // This prevents old songs from dying completely but is now properly scaled down.
+            let userTargetMin = 0;
+            let userTargetMax = 0;
+            if (isSong) {
+                if (isBSide) {
+                     if (currentTrend === 'Mega Hit Big') {
+                         userTargetMin = 500000; userTargetMax = 800000;
+                     } else if (currentTrend === 'Mega Hit Medium') {
+                         userTargetMin = 300000; userTargetMax = 500000;
+                     } else if (currentTrend === 'Mega Hit') {
+                         userTargetMin = 250000; userTargetMax = 350000;
+                     } else if (currentTrend === 'Hit Big') {
+                         userTargetMin = 150000; userTargetMax = 250000;
+                     } else if (currentTrend === 'Hit Medium') {
+                         userTargetMin = 100000; userTargetMax = 150000;
+                     } else if (currentTrend === 'Hit') {
+                         userTargetMin = 60000; userTargetMax = 100000;
+                     } else if (currentTrend === 'Non-Hit Big') {
+                         userTargetMin = 40000; userTargetMax = 60000;
+                     } else if (currentTrend === 'Non-Hit Medium') {
+                         userTargetMin = 20000; userTargetMax = 40000;
+                     } else if (currentTrend === 'Non-Hit') {
+                         userTargetMin = 10000; userTargetMax = 20000;
+                     } else {
+                         userTargetMin = 5000; userTargetMax = 10000;
+                     }
+                } else {
+                     if (currentTrend === 'Mega Hit Big') {
+                         userTargetMin = 1500000; userTargetMax = 2500000;
+                     } else if (currentTrend === 'Mega Hit Medium') {
+                         userTargetMin = 1000000; userTargetMax = 1500000;
+                     } else if (currentTrend === 'Mega Hit') {
+                         userTargetMin = 800000; userTargetMax = 1000000;
+                     } else if (currentTrend === 'Hit Big') {
+                         userTargetMin = 600000; userTargetMax = 900000;
+                     } else if (currentTrend === 'Hit Medium') {
+                         userTargetMin = 500000; userTargetMax = 700000;
+                     } else if (currentTrend === 'Hit') {
+                         userTargetMin = 400000; userTargetMax = 600000;
+                     } else if (currentTrend === 'Non-Hit Big') {
+                         userTargetMin = 80000; userTargetMax = 150000;
+                     } else if (currentTrend === 'Non-Hit Medium') {
+                         userTargetMin = 40000; userTargetMax = 80000;
+                     } else if (currentTrend === 'Non-Hit') {
+                         userTargetMin = 20000; userTargetMax = 40000;
+                     } else {
+                         userTargetMin = 5000; userTargetMax = 20000;
+                     }
+                }
+            } else {
+               userTargetMin = 3000000; userTargetMax = 6000000;
+            }
+            
+            // Adjust to player stats. At Level 10+, Pop 300+, Quality 3.5+, target factor is 1.0.
+            const maxLvlRef = 10;
+            const maxPopRef = 300;
+            const lvlScale = Math.min(1.2, effectiveLevel / maxLvlRef);
+            const popScale = Math.min(1.2, Math.max(1, totalPop) / maxPopRef);
+            const qualScale = Math.min(1.2, qualityMod / 3.5);
+            // Cap statScale to avoid overpowering multiplier on the hard floor
+            const statScale = Math.max(0.001, Math.min(1.5, Math.pow(lvlScale * popScale * qualScale, 0.8)));
+            
+            const baseFloor = userTargetMin + ((hash % 100) / 100) * (userTargetMax - userTargetMin);
+            const superstarHardFloor = Math.floor(baseFloor * statScale * (Math.random() * 0.2 + 0.9));
+
+            if (rawStreamsTotal < superstarHardFloor && daysSinceRelease > 7) { 
+                // Legacy stream floor - constant, never drops
+                rawStreamsTotal = Math.max(rawStreamsTotal, superstarHardFloor);
             }
 
             let dStreamsTotal = Math.floor(rawStreamsTotal);
@@ -849,7 +1056,11 @@ export default function App() {
             let finalTikTokMultiplier = 1.0;
             const tkSoundState = updatedTikTok?.sounds.find((s: any) => s.songId === release.id);
             if (tkSoundState) {
-                if (tkSoundState.trendingStatus === 'Mega Hits') finalTikTokMultiplier = 2.5;
+                if (tkSoundState.trendingStatus === 'Mega Hits Big') finalTikTokMultiplier = 3.5;
+                else if (tkSoundState.trendingStatus === 'Mega Hits Medium') finalTikTokMultiplier = 3.0;
+                else if (tkSoundState.trendingStatus === 'Mega Hits') finalTikTokMultiplier = 2.5;
+                else if (tkSoundState.trendingStatus === 'Hits Big') finalTikTokMultiplier = 2.0;
+                else if (tkSoundState.trendingStatus === 'Hits Medium') finalTikTokMultiplier = 1.7;
                 else if (tkSoundState.trendingStatus === 'Hits') finalTikTokMultiplier = 1.5;
                 else if (tkSoundState.trendingStatus === 'TikTok Trend') finalTikTokMultiplier = 1.25;
             }
@@ -1244,9 +1455,10 @@ export default function App() {
       let updatedReleasesWithSales = updatedReleases.map(r => {
          const d = totalDigitalSalesToAdd[r.id] || 0;
          const p = totalPhysicalSalesToAdd[r.id] || 0;
+         let newR = r;
          if (d > 0 || p > 0 || !r.sales) {
              const exist = r.sales || { physical: 0, digital: 0, total: 0 };
-             return {
+             newR = {
                  ...r,
                  sales: {
                      physical: exist.physical + p,
@@ -1255,7 +1467,68 @@ export default function App() {
                  }
              };
          }
-         return r;
+         
+         if (['Album', 'EP', 'Single Pack', 'Deluxe Album'].includes(newR.type)) {
+             const mappedAlbum = newR as Album;
+             if (mappedAlbum.trackIds && mappedAlbum.trackIds.length > 0) {
+                 const tIds = mappedAlbum.trackIds;
+                 let sumSp = 0, sumAp = 0, sumAm = 0, sumYt = 0, sumTot = 0, sumRadio = 0;
+                 let sumCwStreams = 0, sumLwStreams = 0, sumCwSales = 0, sumLwSales = 0;
+                 let sumCwRadio = 0, sumLwRadio = 0;
+                 let latestLastDaily = { spotify: 0, appleMusic: 0, amazonMusic: 0, youtubeMusic: 0, total: 0 };
+
+                 tIds.forEach(tId => {
+                     const tSync = updatedReleases.find(tr => tr.id === tId);
+                     if (tSync) {
+                         const ts = tSync.streams;
+                         sumSp += typeof ts === 'number' ? ts * 0.4 : (ts?.spotify || 0);
+                         sumAp += typeof ts === 'number' ? ts * 0.25 : (ts?.appleMusic || 0);
+                         sumAm += typeof ts === 'number' ? ts * 0.25 : (ts?.amazonMusic || 0);
+                         sumYt += typeof ts === 'number' ? ts * 0.1 : (ts?.youtubeMusic || 0);
+                         sumTot += typeof ts === 'number' ? ts : (ts?.total || 0);
+                         sumRadio += (tSync.radioPlays || 0);
+                         
+                         sumCwStreams += (tSync.currentWeekStreams || 0);
+                         sumLwStreams += (tSync.lastWeekStreams || 0);
+                         sumCwSales += (tSync.currentWeekSales || 0);
+                         sumLwSales += (tSync.lastWeekSales || 0);
+                         sumCwRadio += (tSync.currentWeekRadio || 0);
+                         sumLwRadio += (tSync.lastWeekRadio || 0);
+                         
+                         if (tSync.lastDailyStreams) {
+                             latestLastDaily.spotify += tSync.lastDailyStreams.spotify;
+                             latestLastDaily.appleMusic += tSync.lastDailyStreams.appleMusic || 0;
+                             latestLastDaily.amazonMusic += tSync.lastDailyStreams.amazonMusic || 0;
+                             latestLastDaily.youtubeMusic += tSync.lastDailyStreams.youtubeMusic || 0;
+                             latestLastDaily.total += tSync.lastDailyStreams.total;
+                         }
+                     }
+                 });
+                 
+                 const totalSEA = Math.floor(sumTot / 1500);
+                 const currentWeekSEA = Math.floor(sumCwStreams / 1500);
+                 const lastWeekSEA = Math.floor(sumLwStreams / 1500);
+
+                 return {
+                     ...newR,
+                     streams: { spotify: sumSp, appleMusic: sumAp, amazonMusic: sumAm, youtubeMusic: sumYt, total: sumTot },
+                     sales: {
+                         physical: newR.sales?.physical || 0,
+                         digital: newR.sales?.digital || 0,
+                         total: (newR.sales?.physical || 0) + (newR.sales?.digital || 0) + totalSEA
+                     },
+                     radioPlays: sumRadio,
+                     currentWeekStreams: sumCwStreams,
+                     lastWeekStreams: sumLwStreams,
+                     currentWeekSales: (newR.currentWeekSales || 0) + currentWeekSEA,
+                     lastWeekSales: (newR.lastWeekSales || 0) + lastWeekSEA,
+                     currentWeekRadio: sumCwRadio,
+                     lastWeekRadio: sumLwRadio,
+                     lastDailyStreams: latestLastDaily
+                 };
+             }
+         }
+         return newR;
       });
 
       let dailyYoutubeViews = 0;
@@ -1289,7 +1562,8 @@ export default function App() {
          
          return {
             ...video,
-            views: (video.views || 0) + ytDaily
+            views: (video.views || 0) + ytDaily,
+            lastDailyViews: ytDaily
          };
       });
 
@@ -1402,24 +1676,37 @@ export default function App() {
            nextGrammys.stage = 'Results';
         } else {
            if (nextGrammys.stage === 'Results') {
-              // Save player nominations to history before resetting
-              const playerNominationsThisYear: any[] = [];
+              // Save player nominations and any NPC winners to history before resetting
+              const nominationsThisYearToSave: any[] = [];
               (currentGrammys.results || []).forEach(cat => {
                  const playerNom = cat.nominees.find(n => n.isPlayer);
                  if (playerNom) {
-                    playerNominationsThisYear.push({
+                    nominationsThisYearToSave.push({
                        category: cat.category,
                        nominee: playerNom,
                        won: cat.winnerId === playerNom.id
                     });
                  }
+                 
+                 // If the player didn't win this category, also save the NPC winner for YouTube integration
+                 if (cat.winnerId && (!playerNom || cat.winnerId !== playerNom.id)) {
+                     const winnerNom = cat.nominees.find(n => n.id === cat.winnerId);
+                     if (winnerNom) {
+                         nominationsThisYearToSave.push({
+                             category: cat.category,
+                             nominee: winnerNom,
+                             won: true,
+                             isHiddenFromPlayerHistory: true
+                         });
+                     }
+                 }
               });
 
               let nextHistory = currentGrammys.history ? [...currentGrammys.history] : [];
-              if (playerNominationsThisYear.length > 0) {
+              if (nominationsThisYearToSave.length > 0) {
                  nextHistory.push({
                     year: currentGrammys.year,
-                    nominations: playerNominationsThisYear
+                    nominations: nominationsThisYearToSave
                  });
               }
 
@@ -1680,10 +1967,11 @@ export default function App() {
         // NPC Collab Offer Logic
         const pendingCollabsCount = newEmails.filter(e => e.collabOffer && e.collabOffer.status === 'pending').length;
         if (pendingCollabsCount < 3 && (prev.artist?.level || 0) >= 3 && Math.random() < 0.05) {
-            const npc = NPC_ARTISTS[Math.floor(Math.random() * NPC_ARTISTS.length)];
+            const availableNpcs = NPC_ARTISTS.filter(n => !prev.artist?.name || n.name.toLowerCase() !== prev.artist.name.toLowerCase());
+            const npc = availableNpcs[Math.floor(Math.random() * availableNpcs.length)];
             
             let songName = `${['Heart', 'Night', 'Fire', 'Lost', 'Found', 'Dream', 'Broken', 'Wild', 'Midnight', 'Summer', 'Echo', 'Love', 'Tears', 'Shadow'][Math.floor(Math.random() * 14)]} ${['Awake', 'City', 'Walker', 'Lover', 'Soul', 'Sky', 'River', 'Road', 'Vibes', 'Lights', 'Hearts', 'Spirits'][Math.floor(Math.random() * 12)]}`;
-            let coverArt = (npc as any).coverImage || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`;
+            let coverArt = (npc as any).coverImage || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`;
             
             const disco = ARTIST_DISCOGRAPHY[npc.name];
             if (disco && disco.tracks && disco.tracks.length > 0) {
@@ -1788,6 +2076,14 @@ Top Generating Song:
             newMonthSongRev = {};
         }
 
+        const newNews = prev.news ? [...prev.news] : [];
+        const dailyNews = generateDailyNews(prev, nextDateObj, nextDateObj.toISOString());
+        if (dailyNews) {
+           newNews.unshift(dailyNews);
+           // keep max 50 news items
+           if (newNews.length > 50) newNews.length = 50;
+        }
+
         return {
           ...prev,
           artist: prev.artist ? { 
@@ -1835,7 +2131,8 @@ Top Generating Song:
           tikTok: updatedTikTok,
           grammys: nextGrammys,
           wrappedHistory: newWrappedHistory,
-          emails: newEmails
+          emails: newEmails,
+          news: newNews
         };
       });
 
@@ -1884,15 +2181,19 @@ Top Generating Song:
     
     const npcReleases = [];
     NPC_ARTISTS.forEach((npc, i) => {
+        if (artistData.name && npc.name.toLowerCase() === artistData.name.toLowerCase()) return;
         const disco = (ARTIST_DISCOGRAPHY as any) || {};
 
         // 1 Album
         let albumId = `npc-${npc.name}-album-0`;
-        const albumDisco = disco[npc.name]?.albums?.[0];
-        
+        let albumDisco = disco[npc.name]?.albums?.[0];
         let albumTracks = [];
+
         if (disco[npc.name]?.tracks && disco[npc.name]?.tracks.length > 0) {
-            albumTracks = disco[npc.name].tracks.filter((t: any) => t.cover === albumDisco?.cover);
+            albumTracks = disco[npc.name].tracks.filter((t: any) => t.album === albumDisco?.title || (t.album && albumDisco?.title && t.album.toLowerCase().includes(albumDisco.title.toLowerCase())));
+            if (albumTracks.length === 0) {
+                albumTracks = disco[npc.name].tracks.filter((t: any) => t.cover === albumDisco?.cover);
+            }
             if (albumTracks.length === 0) {
                  albumTracks = disco[npc.name].tracks.slice(0, 10);
             }
@@ -1901,15 +2202,24 @@ Top Generating Song:
             }
         }
 
+        if (!albumDisco || !albumTracks || albumTracks.length === 0 || !albumDisco.title) return;
+
+        let albType = 'Album';
         if (albumDisco) {
+             if (albumDisco.title) {
+                 if (albumDisco.title.match(/ - Single$/i)) albType = 'Single Pack';
+                 else if (albumDisco.title.match(/ - EP$/i)) albType = 'EP';
+                 albumDisco.title = albumDisco.title.replace(/ - Single$/i, '').replace(/ - EP$/i, ' EP');
+             }
+
             const trackIds = albumTracks.map((_, i) => `npc-${npc.name}-single-0-${i}`);
             npcReleases.push({
                 id: albumId,
                 title: albumDisco.title,
-                coverImage: albumDisco.cover || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`,
+                coverImage: albumDisco.cover || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`,
                 artistId: npc.name,
                 isNPCRelease: true,
-                type: 'Album',
+                type: albType as any,
                 status: 'Published',
                 releaseDate: INITIAL_DATE,
                 trackIds, // Let this be populated so it behaves correctly
@@ -1947,7 +2257,7 @@ Top Generating Song:
             npcReleases.push({
                 id: `npc-${npc.name}-single-0-${i}`,
                 title: title,
-                coverImage: track.cover || albumDisco?.cover || `https://i.pravatar.cc/200?u=${encodeURIComponent(npc.name)}`,
+                coverImage: albumDisco?.cover || track.cover || `https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=600&auto=format&fit=crop&q=60`,
                 artistId: npc.name,
                 collaborator,
                 isNPCCollab,
@@ -2007,7 +2317,7 @@ Top Generating Song:
         sounds: [],
         fatigueScore: 0
       },
-      npcStats: Object.fromEntries(NPC_ARTISTS.map(npc => {
+      npcStats: Object.fromEntries(NPC_ARTISTS.filter(npc => !artistData.name || npc.name.toLowerCase() !== artistData.name.toLowerCase()).map(npc => {
         const isHighTier = npc.basePoints > 380000;
         const regionBias = Math.random();
         return [
@@ -2228,13 +2538,55 @@ Top Generating Song:
                                if (saved) {
                                   const parsedState = JSON.parse(saved);
                                   if (parsedState && parsedState.releases) {
-                                      parsedState.releases = parsedState.releases.map((r: any) => {
+                                      parsedState.releases = parsedState.releases.filter((r: any) => {
+                                          if (r.isNPCRelease || (r.artistId && NPC_ARTISTS.some(n => n.name === r.artistId))) {
+                                              if (r.coverImage && r.coverImage.includes('pravatar')) return false;
+                                              if (r.title && /Album \d+$/.test(r.title)) return false;
+                                              if (r.title && / Studio Album \d+$/.test(r.title)) return false;
+                                              if (r.title && /'s Debut$/.test(r.title)) return false;
+                                              if (r.title && /- Track \d+$/.test(r.title)) return false;
+                                              if (r.title && /^Single \d+-\d+$/.test(r.title)) return false;
+                                          }
+                                          return true;
+                                      }).map((r: any) => {
                                           if (!r.isNPCRelease && r.artistId && NPC_ARTISTS.some(n => n.name === r.artistId)) {
                                               return { ...r, isNPCRelease: true };
                                           }
                                           return r;
                                       });
                                   }
+                                  if (parsedState && parsedState.grammys) {
+                                      const genericSongs = ["Midnight", "Hold On", "Never Let Go", "City Lights", "Sunset", "Echoes", "Fading Away", "Better Days", "Lost In You", "Runaway", "Silent Whisper", "Dreams", "Euphoria", "Chasing Stars", "Nostalgia", "Desire", "Breathe", "Awake", "Gravity", "Illusions"];
+                                      const genericAlbums = ["The Journey", "Evolution", "Midnight Sessions", "Echoes of Time", "Horizons", "Rebirth", "Golden Hour", "Neon Lights", "Into the Wild", "Silent Storm", "Unplugged", "Daydreams", "Nocturne", "Vibrations", "The Aftermath", "Ascension", "Odyssey", "Mirage", "Prism", "Legacy"];
+                                      
+                                      const fixNominee = (nom: any) => {
+                                         if (nom && nom.title && typeof nom.title === 'string' && / Hit 20\d\d$/.test(nom.title)) {
+                                            let hash = 0;
+                                            if (nom.artist && typeof nom.artist === 'string') {
+                                               hash = (nom.artist.charCodeAt(0) * 17) % 20;
+                                            }
+                                            nom.title = nom.type === 'Album' ? genericAlbums[hash] : genericSongs[hash];
+                                         }
+                                         return nom;
+                                      };
+                                      
+                                      if (parsedState.grammys.results) {
+                                         parsedState.grammys.results = parsedState.grammys.results.map((res: any) => ({
+                                            ...res,
+                                            nominees: res.nominees.map(fixNominee)
+                                         }));
+                                      }
+                                      if (parsedState.grammys.history) {
+                                         parsedState.grammys.history = parsedState.grammys.history.map((hist: any) => ({
+                                            ...hist,
+                                            categories: hist.categories ? hist.categories.map((cat: any) => ({
+                                               ...cat,
+                                               nominees: cat.nominees ? cat.nominees.map(fixNominee) : []
+                                            })) : []
+                                         }));
+                                      }
+                                  }
+                                  
                                   setGameState(parsedState);
                                   setCurrentSaveId(slotId);
                                   setScreen('dashboard');
@@ -2340,16 +2692,9 @@ Top Generating Song:
 
       {/* Top Navigation & Stats Bar */}
       <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between p-4 md:p-6 bg-black/40 backdrop-blur-md border-b border-white/10 gap-4 md:gap-0">
-        <div className="flex items-center justify-between md:justify-start gap-4 md:gap-6">
-          {/* Burger Menu (Mobile only toggles sidebar in standard view, but let's keep it functional or visual) */}
-          <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg transition-all md:hidden"
-          >
-             <span className="text-3xl font-light leading-none">=</span>
-          </button>
-          <div className="hidden md:flex w-12 h-12 items-center justify-center bg-white/5 border border-white/20 rounded-lg cursor-default">
-            <span className="text-3xl font-light leading-none text-white/40">=</span>
+        <div className="flex items-center justify-start gap-4 md:gap-6">
+          <div className="flex w-12 h-12 items-center justify-center bg-purple-600/20 border border-purple-500/30 rounded-lg cursor-default">
+            <Music className="w-5 h-5 text-purple-400" />
           </div>
           <h1 className="text-lg md:text-xl font-bold tracking-tighter italic text-purple-400">MUSICIAN SIMULATOR</h1>
         </div>
@@ -2378,206 +2723,11 @@ Top Generating Song:
       </div>
 
       {/* Main Workspace */}
-      <main className="relative z-10 flex-1 flex flex-col md:grid md:grid-cols-12 gap-6 p-4 md:p-8 overflow-y-auto">
+      <main className="relative z-10 flex-1 flex flex-col p-4 md:p-8 overflow-y-auto mb-[72px]">
         
-        {/* Sidebar / Side Menu Area */}
-        <div className={`col-span-3 flex-col gap-4 ${sidebarOpen ? 'flex' : 'hidden md:flex'}`}>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-purple-400 mb-6">Active View</h3>
-            <nav className="flex flex-col gap-2">
-              <button 
-                onClick={() => { setScreen('dashboard'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'dashboard' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Activity className="w-4 h-4" />
-                Dashboard
-              </button>
-              <button 
-                onClick={() => { setScreen('studio'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'studio' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Mic className="w-4 h-4" />
-                Create Project
-              </button>
-              <button 
-                onClick={() => { setScreen('discography'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'discography' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Disc className="w-4 h-4" />
-                Discography
-              </button>
-              <button 
-                onClick={() => { setScreen('merch'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'merch' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <ShoppingBag className="w-4 h-4" />
-                Merch Store
-              </button>
-              <button 
-                onClick={() => { setScreen('skills'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'skills' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Zap className="w-4 h-4" />
-                Skill Tree
-              </button>
-              <button 
-                onClick={() => { setScreen('regions'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'regions' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Globe className="w-4 h-4" />
-                Region Popularity
-              </button>
-              <button 
-                onClick={() => { setScreen('gigs'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'gigs' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Ticket className="w-4 h-4" />
-                Book Gigs
-              </button>
-              <button 
-                onClick={() => { setScreen('tour'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'tour' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <MapPin className="w-4 h-4" />
-                Tour Settings
-              </button>
-              <button 
-                onClick={() => { setScreen('platforms'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'platforms' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Activity className="w-4 h-4" />
-                Platforms
-              </button>
-              <button 
-                onClick={() => { setScreen('labels'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'labels' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Star className="w-4 h-4" />
-                Record Labels
-              </button>
-              <button 
-                onClick={() => { setScreen('charts'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'charts' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                Charts
-              </button>
-              <button 
-                onClick={() => { setScreen('grammys'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'grammys' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Trophy className="w-4 h-4" />
-                Grammys
-              </button>
-              <button 
-                onClick={() => { setScreen('plaques'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'plaques' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Award className="w-4 h-4" />
-                Plaques
-              </button>
-              <button 
-                onClick={() => { setScreen('google'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'google' ? 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Search className="w-4 h-4" />
-                Web Search
-              </button>
-              <button 
-                onClick={() => { setScreen('youtube'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'youtube' ? 'bg-red-600/20 text-red-200 border border-red-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Play className="w-4 h-4" />
-                YouTube
-              </button>
-              <button 
-                onClick={() => { setScreen('x'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'x' ? 'bg-blue-600/20 text-blue-200 border border-blue-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true" className="w-4 h-4 fill-current"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
-                X (Social)
-              </button>
-              <button 
-                onClick={() => { 
-                   if (!gameState.tikTok) {
-                       setGameState(prev => {
-                           if(!prev) return prev;
-                           return {
-                               ...prev,
-                               tikTok: {
-                                    followers: Math.floor(Math.random() * 500) + 100,
-                                    following: Math.floor(Math.random() * 50) + 10,
-                                    totalLikes: 0,
-                                    username: prev.artist.name.toLowerCase().replace(/[^a-z0-9]/g, '') + 'official',
-                                    displayName: prev.artist.name,
-                                    isVerified: false,
-                                    label: 'Artist',
-                                    posts: [],
-                                    sounds: [],
-                                    fatigueScore: 0
-                               }
-                           }
-                       });
-                   }
-                   setScreen('tiktok'); 
-                   setSidebarOpen(false); 
-                }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'tiktok' ? 'bg-pink-600/20 text-pink-200 border border-pink-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M19.589 6.686a4.793 4.793 0 01-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 01-5.201 1.743l-.002-.001.002.001a2.895 2.895 0 013.183-4.51v-3.5a6.329 6.329 0 00-5.394 10.692 6.33 6.33 0 0010.857-4.424V8.687a8.182 8.182 0 004.773 1.526V6.79a4.831 4.831 0 01-1.003-.104z"></path></svg>
-                TikTok
-              </button>
-              
-              <div className="h-px bg-white/10 my-2" />
-              
-              <button 
-                onClick={() => { setScreen('saves'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'saves' ? 'bg-purple-600/20 text-purple-200 border border-purple-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <Save className="w-4 h-4" />
-                Save / Load Game
-              </button>
-              
-              <button 
-                onClick={() => { setScreen('settings'); setSidebarOpen(false); }}
-                className={`w-full text-left px-4 py-3 rounded-xl flex items-center gap-3 font-medium transition-colors ${screen === 'settings' ? 'bg-gray-600/20 text-gray-200 border border-gray-500/30' : 'bg-transparent text-white/40 hover:bg-white/5 hover:text-white'}`}
-              >
-                <SettingsIcon className="w-4 h-4" />
-                Settings & Redeem
-              </button>
-              
-              <div className="flex gap-2 mt-2">
-                 <a href="https://discord.gg/zNQ9d9J4e" target="_blank" rel="noopener noreferrer" className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 hover:text-[#5865F2] border border-white/5 flex items-center justify-center py-3 rounded-xl transition-colors">
-                     <svg viewBox="0 0 24 24" aria-hidden="true" className="w-4 h-4 fill-current"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
-                 </a>
-                 <a href="https://x.com/RapperRise1" target="_blank" rel="noopener noreferrer" className="flex-1 bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/5 flex items-center justify-center py-3 rounded-xl transition-colors">
-                     <svg viewBox="0 0 24 24" aria-hidden="true" className="w-4 h-4 fill-current"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
-                 </a>
-              </div>
-            </nav>
-          </div>
-
-          <div className="bg-black/40 border border-white/5 rounded-2xl p-6 mt-auto">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-4">Save Management</h3>
-            <div className="flex flex-col gap-3">
-              <button 
-                onClick={() => {
-                   if (gameState && currentSaveId) {
-                      saveGameData(currentSaveId, gameState, false);
-                   }
-                   setScreen('home');
-                }} 
-                className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 py-3 rounded-xl text-xs uppercase tracking-tighter transition-colors text-center"
-              >
-                Save & Quit To Menu
-              </button>
-            </div>
-          </div>
-        </div>
-
         {/* Central Interface */}
         {screen !== 'x' && screen !== 'google' && screen !== 'youtube' && screen !== 'wrapped' && (
-          <div className="col-span-9 flex flex-col h-full bg-black/20 border border-white/5 rounded-3xl overflow-hidden relative min-h-[400px]">
+          <div className="flex-1 flex flex-col h-full bg-black/20 border border-white/5 rounded-3xl overflow-hidden relative min-h-[400px]">
              {screen === 'dashboard' && <DashboardView gameState={gameState} setGameState={setGameState} dateDayStr={dateDayStr} dayName={dayName} monthYearStr={monthYearStr} handleNextDay={handleNextDay} isLoadingNextDay={isLoadingNextDay} currentAgeYears={currentAgeYears} isAutoAdvancing={isAutoAdvancing} setIsAutoAdvancing={setIsAutoAdvancing} onOpenWrapped={() => setScreen('wrapped')} />}
              {screen === 'studio' && <StudioView gameState={gameState!} setGameState={setGameState} currentDate={currentDate} />}
              {screen === 'discography' && <DiscographyView gameState={gameState!} setGameState={setGameState} currentDate={currentDate} />}
@@ -2696,6 +2846,111 @@ Top Generating Song:
           </div>
         </div>
       )}
+
+      {/* Navigation Di Bawah Player Tinggal Klik Klik Aja */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-xl border-t border-white/10 flex items-center overflow-x-auto hide-scrollbar sm:justify-center p-2 gap-1 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] shadow-[0_-10px_40px_rgba(0,0,0,0.5)] style={{ touchAction: 'pan-x' }}">
+        <button onClick={() => setScreen('dashboard')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'dashboard' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Activity className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Dash</span>
+        </button>
+        <button onClick={() => setScreen('studio')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'studio' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Mic className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Studio</span>
+        </button>
+        <button onClick={() => setScreen('discography')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'discography' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Disc className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Disco</span>
+        </button>
+        <button onClick={() => setScreen('merch')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'merch' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <ShoppingBag className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Merch</span>
+        </button>
+        <button onClick={() => setScreen('skills')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'skills' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Zap className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Skills</span>
+        </button>
+        <button onClick={() => setScreen('regions')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'regions' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Globe className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Regions</span>
+        </button>
+        <button onClick={() => setScreen('gigs')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'gigs' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Ticket className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Gigs</span>
+        </button>
+        <button onClick={() => setScreen('tour')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'tour' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <MapPin className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Tour</span>
+        </button>
+        <button onClick={() => setScreen('platforms')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'platforms' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Activity className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Platform</span>
+        </button>
+        <button onClick={() => setScreen('labels')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'labels' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Star className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Labels</span>
+        </button>
+        <button onClick={() => setScreen('charts')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'charts' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <BarChart3 className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Charts</span>
+        </button>
+        <button onClick={() => setScreen('grammys')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'grammys' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Trophy className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Grammy</span>
+        </button>
+        <button onClick={() => setScreen('plaques')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'plaques' ? 'text-purple-400 bg-purple-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Award className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Plaques</span>
+        </button>
+        <div className="w-[1px] h-8 bg-white/10 mx-1 shrink-0" />
+        <button onClick={() => setScreen('google')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'google' ? 'text-indigo-400 bg-indigo-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Search className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Search</span>
+        </button>
+        <button onClick={() => setScreen('youtube')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'youtube' ? 'text-red-400 bg-red-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Play className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">YouTube</span>
+        </button>
+        <button onClick={() => setScreen('x')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'x' ? 'text-blue-400 bg-blue-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" className="w-6 h-6 mb-1 fill-current"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>
+          <span className="text-[10px] font-medium tracking-tight">X</span>
+        </button>
+        <button onClick={() => {
+           if (!gameState.tikTok) {
+               setGameState(prev => {
+                   if(!prev) return prev;
+                   return {
+                       ...prev,
+                       tikTok: {
+                            followers: Math.floor(Math.random() * 500) + 100,
+                            following: Math.floor(Math.random() * 50) + 10,
+                            totalLikes: 0,
+                            username: prev.artist.name.toLowerCase().replace(/[^a-z0-9]/g, '') + 'official',
+                            displayName: prev.artist.name,
+                            isVerified: false,
+                            label: 'Artist',
+                            posts: [],
+                            sounds: [],
+                            fatigueScore: 0
+                       }
+                   }
+               });
+           }
+           setScreen('tiktok');
+        }} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'tiktok' ? 'text-pink-400 bg-pink-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 mb-1"><path d="M19.589 6.686a4.793 4.793 0 01-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 01-5.201 1.743l-.002-.001.002.001a2.895 2.895 0 013.183-4.51v-3.5a6.329 6.329 0 00-5.394 10.692 6.33 6.33 0 0010.857-4.424V8.687a8.182 8.182 0 004.773 1.526V6.79a4.831 4.831 0 01-1.003-.104z"></path></svg>
+          <span className="text-[10px] font-medium tracking-tight">TikTok</span>
+        </button>
+        
+        <div className="w-[1px] h-8 bg-white/10 mx-1 shrink-0" />
+        <button onClick={() => setScreen('saves')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'saves' ? 'text-green-400 bg-green-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <Save className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Save</span>
+        </button>
+        <button onClick={() => setScreen('settings')} className={`flex flex-col items-center justify-center w-[72px] shrink-0 p-2 rounded-xl transition-colors ${screen === 'settings' ? 'text-gray-400 bg-gray-500/10' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+          <SettingsIcon className="w-6 h-6 mb-1" />
+          <span className="text-[10px] font-medium tracking-tight">Settings</span>
+        </button>
+      </nav>
     </div>
   );
 }

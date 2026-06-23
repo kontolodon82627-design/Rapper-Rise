@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { GameState, Song } from '../types';
-import { ChevronLeft, RadioReceiver } from 'lucide-react';
+import { Sparkles, RadioReceiver, ArrowUp, ArrowDown, ArrowRight, Music2, Star } from 'lucide-react';
 import { ARTIST_IMAGES } from '../artistImages';
 
 export function RadioChart({ gameState, onBack }: { gameState: GameState, onBack: () => void }) {
@@ -29,13 +29,25 @@ export function RadioChart({ gameState, onBack }: { gameState: GameState, onBack
            weeklySpins = r.lastWeekRadio;
         }
 
+        const currentSpins = Math.floor(weeklySpins);
+        const lastSpins = r.lastWeekRadio || Math.floor(weeklySpins * 0.8);
+        const peakSpins = Math.floor(Math.max(weeklySpins, (r.radioPlays || 0) / Math.max(1, daysSinceRelease / 7)));
+        const weeksOnChart = Math.max(1, Math.floor(daysSinceRelease / 7));
+
+        const movement = currentSpins > lastSpins ? Math.floor(Math.random() * 5 + 1) : (currentSpins < lastSpins ? -Math.floor(Math.random() * 3 + 1) : 0);
+
         return {
            ...r,
            isPlayer: !isNPC,
            artist: rArtist,
-           weeklySpins: Math.floor(weeklySpins),
-           peakSpins: Math.floor(Math.max(weeklySpins, (r.radioPlays || 0) / Math.max(1, daysSinceRelease / 7))), // Estimate
-           daysOnChart: Math.max(1, Math.floor(daysSinceRelease / 7)),
+           weeklySpins: currentSpins,
+           peakSpins,
+           lastPos: '-', // Would normally be last week's rank
+           peakPos: '-', // Would normally be peak rank
+           movement,
+           isNew: weeksOnChart <= 1,
+           isReEntry: false,
+           weeksOnChart,
            coverImage: r.coverImage || ARTIST_IMAGES[rArtist as string] || `https://i.pravatar.cc/200?u=${encodeURIComponent(rArtist)}`
         };
      });
@@ -45,109 +57,158 @@ export function RadioChart({ gameState, onBack }: { gameState: GameState, onBack
         .sort((a, b) => b.weeklySpins - a.weeklySpins)
         .slice(0, 50);
         
+     // Infer positions
+     top50.forEach((item, index) => {
+        const currentRank = index + 1;
+        item.lastPos = item.isNew ? '-' : String(Math.max(1, currentRank + item.movement));
+        item.peakPos = String(Math.min(currentRank, parseInt(item.lastPos === '-' ? '100' : item.lastPos)));
+     });
+
      return top50;
   }, [gameState]);
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] text-gray-100 font-sans selection:bg-yellow-500/30 overflow-hidden">
-      {/* Dynamic Header */}
-      <div className="relative p-8 md:p-12 shrink-0 border-b border-white/5 bg-gradient-to-br from-[#111] to-[#050505]">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-           <RadioReceiver className="w-48 h-48 rotate-12" />
-        </div>
-        
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-             <button onClick={onBack} className="p-2 -ml-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors mr-2">
-                <ChevronLeft className="w-6 h-6" />
-             </button>
-             <div className="px-3 py-1 bg-yellow-500 text-black text-[10px] font-black uppercase tracking-widest rounded-sm">Official Airplay</div>
-             <div className="text-white/40 text-[10px] uppercase font-black tracking-[0.2em]">Updated Weekly • {currentDateObj.toLocaleDateString()}</div>
-          </div>
-          <h1 className="text-5xl md:text-7xl font-black italic tracking-tighter uppercase mb-4 leading-none">
-            US RADIO <span className="text-yellow-500">TOP 50</span>
-          </h1>
-          <p className="text-white/40 max-w-2xl text-sm font-medium leading-relaxed uppercase tracking-wide">
-            The week's most-played tracks on US terrestrial and digital radio stations, ranked by total weekly spins and audience impressions.
-          </p>
-        </div>
-      </div>
-
-      {/* Chart Legend */}
-      <div className="flex items-center gap-8 px-8 py-4 bg-black/40 border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-white/30 sticky top-0 z-20">
-         <div className="w-12 text-center">Rank</div>
-         <div className="flex-1">Composition / Artist</div>
-         <div className="w-24 text-right">Spins (Wk)</div>
-         <div className="w-20 text-center">Peak</div>
-         <div className="w-24 text-right hidden sm:block">Total Audience</div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto hide-scrollbar pb-20">
-         <div className="divide-y divide-white/[0.03]">
-            {chartData.map((song, idx) => {
-              const isPlayer = song.isPlayer;
-              const spins = Math.floor(song.weeklySpins);
-              const peakSpins = Math.floor(song.peakSpins);
-
-              return (
-                <div 
-                  key={song?.id || idx} 
-                  className={`flex items-center gap-8 px-8 py-6 transition-all group hover:bg-white/[0.02] ${isPlayer ? 'bg-yellow-500/5' : ''}`}
-                >
-                  <div className="w-12 flex flex-col items-center justify-center">
-                    <span className={`text-2xl font-black italic ${idx < 3 ? 'text-yellow-500 scale-125' : 'text-white/20'}`}>
-                      {idx + 1}
-                    </span>
-                    {idx < 3 && <div className="w-1 h-1 bg-yellow-500 rounded-full mt-1 animate-pulse" />}
-                  </div>
-
-                  <div className="flex-1 min-w-0 flex items-center gap-6">
-                    <div className="w-16 h-16 bg-[#111] border border-white/10 rounded-md shrink-0 relative overflow-hidden group-hover:scale-105 transition-transform duration-500 shadow-xl">
-                       {song.coverImage ? (
-                         <img src={song.coverImage || undefined} className="w-full h-full object-cover" alt="" />
-                       ) : (
-                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900 font-black text-white/20">
-                            {song.title.substring(0, 1)}
-                         </div>
-                       )}
-                       {isPlayer && <div className="absolute inset-0 border-2 border-yellow-500 rounded-md" />}
-                    </div>
-                    
-                    <div className="flex flex-col min-w-0 text-left">
-                      <h3 className={`text-xl font-black uppercase tracking-tighter truncate ${isPlayer ? 'text-yellow-500' : 'text-white'}`}>
-                        {song.title}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-white/40 text-xs font-bold uppercase tracking-widest truncate">{song.artist}</span>
-                        {isPlayer && (
-                          <div className="px-2 py-0.5 bg-yellow-500 text-black text-[8px] font-black uppercase rounded-[2px] tracking-tighter">YOU</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="w-24 flex flex-col items-end">
-                    <span className="text-xl font-mono font-black tabular-nums">{spins.toLocaleString()}</span>
-                    <span className="text-[10px] font-bold text-white/20 uppercase tracking-tighter">SPINS</span>
-                  </div>
-
-                  <div className="w-20 flex flex-col items-center">
-                    <div className="text-sm font-mono font-black text-white/40 tracking-tighter">
-                       <span className="text-[10px] opacity-40">PK PK</span> {peakSpins.toLocaleString()}
-                    </div>
-                    <div className={`text-[8px] font-black uppercase tracking-widest mt-1 ${isPlayer && spins >= peakSpins ? 'text-green-500' : 'text-white/20'}`}>
-                       {isPlayer && spins >= peakSpins ? 'NEW PEAK' : ''}
-                    </div>
-                  </div>
-
-                  <div className="w-24 hidden sm:flex flex-col items-end">
-                    <span className="text-sm font-mono font-bold text-white/40">{(spins * 4500).toLocaleString()}</span>
-                    <span className="text-[8px] font-bold text-white/10 uppercase tracking-widest">IMPRESSIONS</span>
-                  </div>
-                </div>
-              );
-            })}
+    <div className="flex flex-col h-full bg-[#f2f0eb] text-black font-sans selection:bg-black/10 overflow-hidden relative">
+      {/* Header Area */}
+      <div className="bg-white shrink-0 border-b border-gray-300 relative z-10">
+         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+               <button onClick={onBack} className="p-2 -ml-2 text-black hover:bg-black/5 rounded-full transition-colors flex items-center justify-center font-bold tracking-tight">
+                  <span className="mr-1">←</span> Back
+               </button>
+            </div>
+            <div className="text-xl font-black tracking-tighter uppercase flex items-center gap-2">
+               RADIO<span className="text-[#cc2b2b]">SONGS</span>
+            </div>
+            <div className="w-10"></div>
          </div>
+      </div>
+      
+      {/* Banner */}
+      <div className="w-full bg-[#cc2b2b] text-white shrink-0 shadow-sm relative z-10">
+         <div className="max-w-5xl mx-auto px-6 py-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+               <div className="inline-flex py-1 px-2 border-2 border-white text-[10px] font-black uppercase tracking-widest mb-3 leading-none">
+                  OFFICIAL AIRPLAY
+               </div>
+               <h1 className="text-5xl md:text-7xl tracking-tighter font-black leading-none mb-2" style={{ fontFamily: 'Impact, sans-serif' }}>
+                  RADIO SONGS
+               </h1>
+               <p className="text-white/80 font-bold uppercase tracking-widest text-[10px]">THE WEEK'S MOST POPULAR SONGS ON TERRESTRIAL AND SATELLITE RADIO.</p>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-white/50 text-left md:text-right">
+               WEEK OF<br/><span className="text-white text-sm">{currentDateObj.toLocaleDateString()}</span>
+            </div>
+         </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto hide-scrollbar pb-20 relative z-0">
+          <div className="w-full flex flex-col max-w-5xl mx-auto">
+             
+             {/* Desktop Column Header */}
+             {chartData.length > 0 && (
+                <div className="hidden md:flex items-center px-4 py-2 border-b-4 border-black text-[10px] font-black tracking-widest uppercase text-gray-500 sticky top-0 bg-[#f2f0eb] z-20">
+                   <div className="w-16 md:w-24 text-center shrink-0">THIS<br/>WEEK</div>
+                   <div className="flex-1">AWARD</div>
+                   <div className="w-24 text-center shrink-0 text-black">SPINS<br/>(WK)</div>
+                   <div className="w-24 text-center shrink-0 ml-6 text-black">AUDIENCE<br/>IMPRESSIONS</div>
+                   <div className="w-14 text-center shrink-0 ml-6 text-black">WEEKS<br/>ON CHART</div>
+                </div>
+             )}
+
+             {chartData.length === 0 && (
+                 <div className="text-center p-12 text-gray-400 font-bold uppercase tracking-widest text-sm">No data available yet. Release more music.</div>
+             )}
+
+             {chartData.map((item, index) => {
+                const isPlayer = item.isPlayer;
+                const isFirst = index === 0;
+                const label = isPlayer ? 'INDEPENDENT' : (item?.id?.length % 2 === 0 ? 'REPUBLIC' : 'ISLAND');
+
+                return (
+                  <div key={`${item?.id}-${index}`} className="flex items-stretch bg-white w-full pr-4 py-3 relative group border-b border-gray-300">
+                     <div className="w-16 md:w-24 shrink-0 flex flex-col items-center justify-center relative">
+                        {isFirst ? (
+                             <span className="text-5xl md:text-6xl font-black tracking-tighter text-[#cc2b2b]" style={{ fontFamily: 'Impact, sans-serif' }}>{index + 1}</span>
+                        ) : (
+                             <span className="text-3xl md:text-4xl font-black mb-1 tracking-tighter text-black" style={{ fontFamily: 'Impact, sans-serif' }}>{index + 1}</span>
+                        )}
+                        
+                        <div className="mt-1 flex items-center justify-center h-5">
+                           {item.isNew && !item.isReEntry ? (
+                               <span className="bg-[#cc2b2b] text-white text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-widest rounded-sm">NEW</span>
+                           ) : item.movement > 0 ? (
+                               <div className="flex items-center gap-0.5 text-gray-500">
+                                  <ArrowUp className="w-4 h-4" strokeWidth={3} />
+                                  <span className="text-[10px] font-bold">{item.movement}</span>
+                               </div>
+                           ) : item.movement < 0 ? (
+                               <div className="flex items-center gap-0.5 text-gray-500">
+                                  <ArrowDown className="w-4 h-4" strokeWidth={3} />
+                                  <span className="text-[10px] font-bold">{Math.abs(item.movement)}</span>
+                               </div>
+                           ) : (
+                               <ArrowRight className="w-4 h-4 text-gray-300" strokeWidth={3} />
+                           )}
+                        </div>
+                     </div>
+
+                     {/* Image */}
+                     <div className="w-20 h-20 md:w-24 md:h-24 shrink-0 bg-[#f4f4f4] flex items-center justify-center overflow-hidden mr-4 md:mr-6 shadow-sm border border-black/5 self-center">
+                        {item.coverImage ? (
+                           <img src={item.coverImage || undefined} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                           <div className="w-full h-full bg-[#f4f4f4] flex items-center justify-center">
+                               <Music2 className="w-8 h-8 text-black/20" strokeWidth={1} />
+                           </div>
+                        )}
+                     </div>
+
+                     {/* Title and Artist Info */}
+                     <div className="flex-1 flex flex-col justify-center min-w-0 pr-2">
+                        <h3 className={`font-black text-lg md:text-xl truncate leading-tight text-black mb-0.5 tracking-tight ${isFirst ? 'md:text-2xl' : ''}`}>{item.title}</h3>
+                        <p className="font-medium text-gray-500 text-sm truncate tracking-tight mb-0.5">{item.artist}</p>
+                        <p className="font-bold text-gray-400 text-[9px] truncate uppercase tracking-widest">{label}</p>
+                        
+                        {/* Mobile stats */}
+                        <div className="flex md:hidden mt-3">
+                            <div className="flex items-center gap-4 text-[10px] font-bold text-gray-500 tracking-wider">
+                               <span>LW <span className="text-black ml-0.5 text-xs">{item.lastPos}</span></span>
+                               <span>PK <span className="text-black ml-0.5 text-xs">{item.peakPos}</span></span>
+                               <span>WKS <span className="text-black ml-0.5 text-xs">{item.weeksOnChart}</span></span>
+                            </div>
+                        </div>
+                     </div>
+                     
+                     {/* Desktop Data Columns */}
+                     <div className="hidden md:flex items-center">
+                        <div className="flex items-center font-bold text-xl tracking-tighter text-black">
+                           <div className="w-24 text-center flex flex-col justify-center items-center">
+                              <span className="text-black w-full text-lg">{item.weeklySpins.toLocaleString()}</span>
+                              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Spins</span>
+                           </div>
+                           <div className="w-24 text-center ml-6 flex flex-col justify-center items-center">
+                              <span className="text-gray-400 w-full text-lg">{(item.weeklySpins * 4500).toLocaleString()}</span>
+                              <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Impressions</span>
+                           </div>
+                           <div className="w-14 text-center ml-6 flex justify-center items-center">
+                              <span className="text-gray-400 w-full">{item.weeksOnChart}</span>
+                           </div>
+                        </div>
+                        
+                        {/* Action button */}
+                        <div className="flex items-center justify-end w-12 ml-4">
+                           {isPlayer && (
+                              <button className="w-8 h-8 flex items-center justify-center rounded-full bg-black hover:bg-gray-800 transition-colors">
+                                 <Star className="w-4 h-4 text-white fill-white" strokeWidth={0} />
+                              </button>
+                           )}
+                        </div>
+                     </div>
+                  </div>
+                );
+             })}
+          </div>
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { GameState, GrammysState, Release } from '../types';
-import { Award, Music, Disc, User, CheckCircle2, AlertCircle, Sparkles, ChevronRight, Trophy } from 'lucide-react';
+import { Award, Music, Disc, User, CheckCircle2, AlertCircle, Sparkles, ChevronRight, Trophy, Play } from 'lucide-react';
+import { GrammySvg } from './GrammySvg';
 import { motion, AnimatePresence } from 'motion/react';
 import { ARTIST_IMAGES } from '../artistImages';
+import { GrammysLiveBroadcast } from './GrammysLiveBroadcast';
 
 interface GrammysViewProps {
   gameState: GameState;
@@ -11,6 +13,7 @@ interface GrammysViewProps {
 
 export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
   const [activeTab, setActiveTab] = useState<'current' | 'profile'>('current');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
   const grammys = gameState.grammys || { year: 2024, stage: 'Closed' as const, submissions: [], submittedReleaseIds: [], results: [], history: [] };
   const currentYear = new Date(gameState.time.startDate).getFullYear() + Math.floor(gameState.time.daysPassed / 365);
   
@@ -20,7 +23,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
       const currentSubs = prev.grammys.submissions || [];
       const newSubmissions = currentSubs.filter(s => s.category !== category);
       if (workId) {
-        newSubmissions.push({ category: category as any, workId });
+        newSubmissions.push({ category: category as any, workId, clipQuery: '' });
       }
       return {
         ...prev,
@@ -32,6 +35,21 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
     });
   };
 
+  const handleClipQueryChange = (category: string, clipQuery: string) => {
+    setGameState(prev => {
+       if (!prev || !prev.grammys) return prev;
+       const currentSubs = prev.grammys.submissions || [];
+       const newSubmissions = currentSubs.map(s => s.category === category ? { ...s, clipQuery } : s);
+       return {
+         ...prev,
+         grammys: {
+           ...prev.grammys,
+           submissions: newSubmissions
+         }
+       };
+    });
+  };
+
   const eligibleReleases = gameState.releases.filter(r => {
     if ((r as any).isNPCRelease) return false;
     if (r.status !== 'Published' || !r.releaseDate) return false;
@@ -40,21 +58,25 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
   });
 
   const eligibleSingles = eligibleReleases.filter(r => r.type === 'Single');
-  const eligibleAlbums = eligibleReleases.filter(r => r.type === 'Album');
+  const eligibleAlbums = eligibleReleases.filter(r => ['Album', 'EP', 'Deluxe Album', 'Single Pack'].includes(r.type));
 
   const submissionCategories = [
     { id: 'Artist of the Year', name: 'Artist of the Year', type: 'Artist' },
     { id: 'Record of the Year', name: 'Record of the Year', type: 'Single' },
     { id: 'Song of the Year', name: 'Song of the Year', type: 'Single' },
-    { id: 'Best Pop Duo/Group Performance', name: 'Best Pop Duo/Group Performance', type: 'Collab' },
+    { id: 'Best Pop Solo Performance', name: 'Best Pop Solo Performance', type: 'Single', genre: ['Pop'] },
+    { id: 'Best Pop Duo/Group Performance', name: 'Best Pop Duo/Group Performance', type: 'Collab', genre: ['Pop'] },
+    { id: 'Best K-Pop Performance', name: 'Best K-Pop Performance', type: 'Single', genre: ['Kpop'] },
+    { id: 'Best Rap Song', name: 'Best Rap Song', type: 'Single', genre: ['Rap'] },
+    { id: 'Best Country Song', name: 'Best Country Song', type: 'Single', genre: ['Country'] },
     { id: 'Album of the Year', name: 'Album of the Year', type: 'Album' },
     { id: 'Best Pop Album', name: 'Best Pop Album', type: 'Album', genre: ['Pop', 'Kpop'] },
     { id: 'Best Rap Album', name: 'Best Rap Album', type: 'Album', genre: ['Rap'] },
     { id: 'Best Country Album', name: 'Best Country Album', type: 'Album', genre: ['Country'] },
   ];
 
-  const totalNoms = grammys.history?.reduce((acc, h) => acc + h.nominations.length, 0) || 0;
-  const totalWins = grammys.history?.reduce((acc, h) => acc + h.nominations.filter(n => n.won).length, 0) || 0;
+  const totalNoms = grammys.history?.reduce((acc, h) => acc + h.nominations.filter(n => !n.isHiddenFromPlayerHistory).length, 0) || 0;
+  const totalWins = grammys.history?.reduce((acc, h) => acc + h.nominations.filter(n => !n.isHiddenFromPlayerHistory && n.won).length, 0) || 0;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#f8f8f8] relative font-sans text-black">
@@ -106,10 +128,13 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                </div>
 
                <div className="flex flex-col border border-gray-200">
-                  {grammys.history && grammys.history.slice().reverse().map((yearEntry) => (
+                  {grammys.history && grammys.history.slice().reverse().map((yearEntry) => {
+                     const validNoms = yearEntry.nominations.filter((n: any) => !n.isHiddenFromPlayerHistory);
+                     if (validNoms.length === 0) return null;
+                     return (
                      <div key={yearEntry.year} className="flex flex-col border-b border-gray-200 last:border-b-0 bg-white">
                         <div className="px-6 py-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
-                           <h3 className="text-xl font-bold">{yearEntry.year}th Annual GRAMMY Awards</h3>
+                           <h3 className="text-xl font-bold">{yearEntry.year - 1958}{['st','nd','rd'][((yearEntry.year - 1958 + 90) % 100 - 10) % 10 - 1] || 'th'} Annual GRAMMY Awards</h3>
                            <ChevronRight className="w-6 h-6 text-gray-400" />
                         </div>
                         
@@ -117,7 +142,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                            <div className="text-gray-500 uppercase tracking-widest font-bold text-ss mb-6">Nominations</div>
                            
                            <div className="flex flex-col gap-6">
-                              {yearEntry.nominations.map((nom, idx) => (
+                              {validNoms.map((nom: any, idx: number) => (
                                  <div key={idx} className="flex gap-6 items-start">
                                     <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-100 flex-shrink-0 relative overflow-hidden flex items-center justify-center p-2">
                                         <div className="absolute inset-0 bg-gradient-to-b from-[#d4af37] to-[#8a6d17] mix-blend-multiply opacity-20 hidden"></div>
@@ -126,7 +151,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                                             <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 10px, rgba(212, 175, 55, 0.3) 10px, rgba(212, 175, 55, 0.3) 12px)' }}></div>
                                             <div className="absolute right-0 bottom-0 w-3/4 h-3/4 flex items-center justify-center filter drop-shadow-lg z-10">
                                               <div className="w-10 h-10 rounded-full bg-[#d4af37] absolute flex items-center justify-center shadow-lg border border-[#ffd700]"></div>
-                                              <Trophy className="w-12 h-12 text-[#111] z-20 absolute -right-2 top-0" fill="#d4af37" />
+                                              <GrammySvg className="w-12 h-12 text-[#111] z-20 absolute -right-2 top-0" fill="#d4af37" />
                                               <div className="w-16 h-8 bg-[#d4af37] absolute bottom-2 rounded-t-sm shadow-md border-t border-[#ffd700]"></div>
                                             </div>
                                         </div>
@@ -151,7 +176,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                            </div>
                         </div>
                      </div>
-                  ))}
+                  );})}
                   {(!grammys.history || grammys.history.length === 0) && (
                      <div className="p-8 text-center text-gray-500 font-bold uppercase tracking-widest">
                         No Grammy history yet.
@@ -170,7 +195,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
         <div>
            <div className="flex items-center gap-2 mb-2">
-             <Trophy className="w-5 h-5 text-yellow-500" />
+             <GrammySvg className="w-5 h-5 text-yellow-500" />
              <span className="text-yellow-500 font-bold tracking-[0.2em] text-[10px] uppercase">The Recording Academy</span>
            </div>
            <h2 className="text-4xl font-black tracking-tighter italic text-white uppercase leading-none">
@@ -223,11 +248,30 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                 if (cat.type === 'Artist') {
                   options = [{ id: 'artist', title: `${gameState.artist?.name || 'Self'} (${cat.name})` }];
                 } else if (cat.type === 'Single') {
-                  options = eligibleSingles;
+                  options = eligibleSingles.filter(s => {
+                    const song = s as any;
+                    const hasCollab = !!song.collaborator || !!song.featuredArtistCost || !!song.isNPCCollab || /feat\./i.test(song.title || '') || /&/.test(song.artist || '');
+                    if (cat.id === 'Best Pop Solo Performance' && hasCollab) return false;
+                    const songGenre = song.genre || 'Pop';
+                    return !cat.genre || cat.genre.includes(songGenre);
+                  });
                 } else if (cat.type === 'Collab') {
-                  options = eligibleSingles.filter(s => (s as any).featuredArtistCost);
+                  options = eligibleSingles.filter(s => {
+                    const song = s as any;
+                    const hasCollab = !!song.collaborator || !!song.featuredArtistCost || !!song.isNPCCollab || /feat\./i.test(song.title || '') || /&/.test(song.artist || '');
+                    const songGenre = song.genre || 'Pop';
+                    return hasCollab && (!cat.genre || cat.genre.includes(songGenre));
+                  });
                 } else if (cat.type === 'Album') {
-                  options = eligibleAlbums.filter(a => !cat.genre || (a as any).genre && cat.genre.includes((a as any).genre));
+                  options = eligibleAlbums.filter(a => {
+                    if (!cat.genre) return true;
+                    if ((a as any).genre && cat.genre.includes((a as any).genre)) return true;
+                    // Derive from tracks
+                    const trackIds = (a as any).trackIds || [];
+                    const tracks = gameState.releases.filter(s => trackIds.includes(s.id));
+                    const trackGenres = tracks.map(t => (t as any).genre || 'Pop');
+                    return trackGenres.some(g => cat.genre!.includes(g));
+                  });
                 }
 
                 if (options.length === 0) return null; // Cannot submit if no eligible work
@@ -236,7 +280,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                   <div key={cat.id} className="bg-white/5 border border-white/10 p-4 rounded-2xl flex flex-col gap-3">
                     <h4 className="font-bold text-sm tracking-tight text-yellow-500">{cat.name}</h4>
                     <select 
-                      value={currentSub?.workId || ''}
+                      value={currentSub?.workId || ''} 
                       onChange={(e) => handleSubmission(cat.id, e.target.value)}
                       className="bg-black border border-white/10 rounded-xl p-3 text-sm text-white focus:border-blue-500 focus:outline-none"
                     >
@@ -258,15 +302,31 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
            <motion.div 
              initial={{ opacity: 0, y: 20 }}
              animate={{ opacity: 1, y: 0 }}
-             className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+             className="flex flex-col gap-8"
            >
+              {(grammys.stage === 'Nominations' || grammys.stage === 'Ceremony' || grammys.stage === 'Results') && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-3xl p-8 flex flex-col items-center justify-center text-center">
+                     <GrammySvg className="w-16 h-16 text-yellow-500 mb-4" />
+                     <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">The {grammys.year} Grammys {grammys.stage === 'Nominations' ? 'Nominations' : 'Ceremony'}</h2>
+                     <p className="text-white/70 max-w-md mb-6">{grammys.stage === 'Nominations' ? 'The nominations are being announced live.' : 'The awards ceremony is now taking place.'} Watch the live broadcast now.</p>
+                     <button 
+                       onClick={() => setIsBroadcasting(true)}
+                       className="bg-yellow-500 text-black px-8 py-4 rounded-full font-bold uppercase tracking-wider flex items-center gap-2 hover:bg-yellow-400 transition-colors shadow-lg shadow-yellow-500/20"
+                     >
+                        <Play className="w-5 h-5" />
+                        Watch Live Broadcast
+                     </button>
+                  </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {grammys.results.map((result, idx) => (
                  <div key={idx} className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
                     <div className="bg-white/5 p-6 border-b border-white/10 flex justify-between items-center">
                        <h3 className="text-xl font-black italic tracking-tighter text-yellow-500 uppercase">{result.category}</h3>
                        {grammys.stage === 'Results' && result.winnerId && result.nominees.find(n => n?.id === result.winnerId)?.isPlayer && (
                           <div className="bg-yellow-500 text-black px-2 py-1 rounded text-[10px] font-black uppercase flex items-center gap-1 animate-pulse">
-                             <Trophy className="w-3 h-3" />
+                             <GrammySvg className="w-3 h-3" />
                              Artist Won
                           </div>
                        )}
@@ -314,6 +374,7 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
                     </div>
                  </div>
               ))}
+              </div>
            </motion.div>
         )}
 
@@ -332,6 +393,13 @@ export function GrammysView({ gameState, setGameState }: GrammysViewProps) {
         )}
       </AnimatePresence>
       </div>
+      )}
+      
+      {isBroadcasting && (
+          <GrammysLiveBroadcast 
+            gameState={gameState} 
+            onClose={() => setIsBroadcasting(false)} 
+          />
       )}
     </div>
   );

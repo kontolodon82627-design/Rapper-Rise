@@ -21,9 +21,13 @@ export function processTikTokDaily(
                 if (sound) {
                     switch(sound.trendingStatus as any) {
                         case 'TikTok Trend': soundMultiplier = 1.5; break;
-                        case 'Hits': soundMultiplier = 4.0; break;
-                        case 'Mega Hits': soundMultiplier = 15.0; break;
+                        case 'Hits': case 'Hits Medium': soundMultiplier = 4.0; break;
+                        case 'Hits Big': soundMultiplier = 6.0; break;
+                        case 'Mega Hits': case 'Mega Hits Medium': soundMultiplier = 15.0; break;
+                        case 'Mega Hits Big': soundMultiplier = 25.0; break;
                         case 'Non Trend':
+                        case 'Non Trend Medium':
+                        case 'Non Trend Big':
                         default: soundMultiplier = 0.5; break;
                     }
                 } else {
@@ -87,9 +91,13 @@ export function processTikTokDaily(
             if (sound) {
                 switch(sound.trendingStatus as any) {
                     case 'TikTok Trend': soundMultiplier = 1.5; break;
-                    case 'Hits': soundMultiplier = 4.0; break;
-                    case 'Mega Hits': soundMultiplier = 15.0; break;
+                    case 'Hits': case 'Hits Medium': soundMultiplier = 4.0; break;
+                    case 'Hits Big': soundMultiplier = 6.0; break;
+                    case 'Mega Hits': case 'Mega Hits Medium': soundMultiplier = 15.0; break;
+                    case 'Mega Hits Big': soundMultiplier = 25.0; break;
                     case 'Non Trend':
+                    case 'Non Trend Medium':
+                    case 'Non Trend Big':
                     default: soundMultiplier = 0.5; break;
                 }
             } else {
@@ -167,15 +175,15 @@ export function processTikTokDaily(
                 const regions = sound.campaign.regionsPromoted || 1;
                 let roll = Math.random();
                 let newStatus: typeof sound.trendingStatus = 'Non Trend';
-                if (regions >= 10 && roll < 0.05) newStatus = 'Mega Hits';
-                else if (regions >= 5 && roll < 0.15) newStatus = 'Hits';
+                if (regions >= 10 && roll < 0.05) newStatus = 'Mega Hits Big';
+                else if (regions >= 5 && roll < 0.15) newStatus = 'Hits Big';
+                else if (sound.trendingStatus === 'Hits Big' && roll < 0.02) newStatus = 'Mega Hits Medium';
                 else if (sound.trendingStatus === 'Hits' && roll < 0.02) newStatus = 'Mega Hits';
                 else if (regions >= 1 && roll < 0.8) newStatus = 'TikTok Trend';
 
                 // Only upgrade status
-                if (sound.trendingStatus === 'Non Trend' || 
-                   (sound.trendingStatus === 'TikTok Trend' && (newStatus === 'Hits' || newStatus === 'Mega Hits')) ||
-                   (sound.trendingStatus === 'Hits' && newStatus === 'Mega Hits') ) {
+                const trendLevels = ['Non Trend', 'Non Trend Medium', 'Non Trend Big', 'TikTok Trend', 'Hits', 'Hits Medium', 'Hits Big', 'Mega Hits', 'Mega Hits Medium', 'Mega Hits Big'];
+                if (trendLevels.indexOf(newStatus) > trendLevels.indexOf(sound.trendingStatus)) {
                      sound.trendingStatus = newStatus;
                 }
             }
@@ -187,23 +195,31 @@ export function processTikTokDaily(
         
         switch (sound.trendingStatus as any) {
             case 'TikTok Trend': dailyUses = 50; dailySoundViews = 25000; break;
-            case 'Hits': dailyUses = 800; dailySoundViews = 150000; break;
-            case 'Mega Hits': dailyUses = 4000; dailySoundViews = 1500000; break;
+            case 'Hits': dailyUses = 400; dailySoundViews = 90000; break;
+            case 'Hits Medium': dailyUses = 800; dailySoundViews = 150000; break;
+            case 'Hits Big': dailyUses = 1500; dailySoundViews = 400000; break;
+            case 'Mega Hits': dailyUses = 3000; dailySoundViews = 800000; break;
+            case 'Mega Hits Medium': dailyUses = 4000; dailySoundViews = 1500000; break;
+            case 'Mega Hits Big': dailyUses = 7000; dailySoundViews = 2500000; break;
+            case 'Non Trend Big':
+            case 'Non Trend Medium':
             case 'Non Trend': 
             default: 
                 dailyUses = Math.floor(Math.random() * 5); 
                 dailySoundViews = dailyUses * 50; 
-                if(!['Non Trend', 'TikTok Trend', 'Hits', 'Mega Hits'].includes(sound.trendingStatus)) {
-                    sound.trendingStatus = 'Non Trend';
-                }
+                // Remove the reset block so it doesn't downgrade unknown tiers
                 break;
         }
 
         // Apply fatigue (slowly dies down)
-        if (sound.trendingStatus !== 'Non Trend' && Math.random() < 0.04 && !sound.campaign?.active) {
-            if (sound.trendingStatus === 'Mega Hits') sound.trendingStatus = 'Hits';
+        if (!sound.trendingStatus.includes('Non Trend') && Math.random() < 0.04 && !sound.campaign?.active) {
+            if (sound.trendingStatus === 'Mega Hits Big') sound.trendingStatus = 'Mega Hits Medium';
+            else if (sound.trendingStatus === 'Mega Hits Medium') sound.trendingStatus = 'Mega Hits';
+            else if (sound.trendingStatus === 'Mega Hits') sound.trendingStatus = 'Hits Big';
+            else if (sound.trendingStatus === 'Hits Big') sound.trendingStatus = 'Hits Medium';
+            else if (sound.trendingStatus === 'Hits Medium') sound.trendingStatus = 'Hits';
             else if (sound.trendingStatus === 'Hits') sound.trendingStatus = 'TikTok Trend';
-            else if (sound.trendingStatus === 'TikTok Trend') sound.trendingStatus = 'Non Trend';
+            else if (sound.trendingStatus === 'TikTok Trend') sound.trendingStatus = 'Non Trend Big';
         }
 
         sound.usedInVideos += Math.floor(dailyUses * (0.8 + Math.random() * 0.4));
@@ -211,8 +227,8 @@ export function processTikTokDaily(
         
         let streams = 0;
         if (sound.trendingStatus === 'TikTok Trend') streams = Math.floor(dailySoundViews * 0.05);
-        else if (sound.trendingStatus === 'Hits') streams = Math.floor(dailySoundViews * 0.1); 
-        else if (sound.trendingStatus === 'Mega Hits') streams = Math.floor(dailySoundViews * 0.15);
+        else if (sound.trendingStatus.includes('Hits')) streams = Math.floor(dailySoundViews * 0.1); 
+        else if (sound.trendingStatus.includes('Mega Hits')) streams = Math.floor(dailySoundViews * 0.15);
         else streams = Math.floor(dailySoundViews * 0.01);
         
         streamsDelta[sound.songId] = (streamsDelta[sound.songId] || 0) + streams;

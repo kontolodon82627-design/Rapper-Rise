@@ -1,5 +1,6 @@
 import { GameState, GrammysNominee, GrammysCategoryResult, AwardCategory } from './types';
-import { NPC_ARTISTS, generateNPCSongs, generateNPCAlbums } from './constants';
+import { NPC_ARTISTS } from './constants';
+import { ARTIST_DISCOGRAPHY } from './artistDiscography';
 
 export function generateNominees(gameState: GameState, year: number): GrammysCategoryResult[] {
   const previousYear = year - 1;
@@ -30,10 +31,14 @@ export function generateNominees(gameState: GameState, year: number): GrammysCat
     'Song of the Year',
     'Album of the Year',
     'Record of the Year',
+    'Best Pop Solo Performance',
     'Best Pop Duo/Group Performance',
     'Best Pop Album',
-    'Best Country Album',
-    'Best Rap Album'
+    'Best K-Pop Performance',
+    'Best Rap Song',
+    'Best Rap Album',
+    'Best Country Song',
+    'Best Country Album'
   ];
 
   const submissions = gameState.grammys?.submissions || [];
@@ -47,7 +52,7 @@ export function generateNominees(gameState: GameState, year: number): GrammysCat
     const release = playerReleases.find(r => r?.id === sub.workId && (type === 'Single' ? r.type === 'Single' : r.type === 'Album'));
     if (release) {
        const artistName = (release as any).isNPCCollab ? `${(release as any).collaborator} & ${gameState.artist?.name || 'Player'}` : ((release.type === 'Single' && (release as any).collaborator) ? `${gameState.artist?.name || 'Player'} & ${(release as any).collaborator}` : gameState.artist?.name || 'Player');
-       return { id: release.id, title: release.title, artist: artistName, isPlayer: true, type };
+       return { id: release.id, title: release.title, artist: artistName, isPlayer: true, type, coverImage: release.coverImage, clipQuery: sub.clipQuery };
     }
     return null;
   };
@@ -77,16 +82,55 @@ export function generateNominees(gameState: GameState, year: number): GrammysCat
         npcAlbums.forEach(a => pool.push({ id: a.id, title: a.title, artist: a.artist, isPlayer: false, type: 'Album', coverImage: a.coverImage }));
         break;
       }
+      case 'Best Pop Solo Performance': {
+        const pSub = getSubmittedWork('Best Pop Solo Performance', 'Single');
+        if (pSub) pool.push(pSub);
+        npcSingles.filter(s => {
+           const song: any = s;
+           const isCollab = !!song.collaborator || !!song.featuredArtistCost || !!song.isNPCCollab || /feat\./i.test(s.title || '') || /&/.test(song.artist || '');
+           const npc = NPC_ARTISTS.find(n => n.name === s.artist);
+           return npc?.type === 'Pop' && !isCollab;
+        }).forEach(s => pool.push({ id: s.id, title: s.title, artist: s.artist, isPlayer: false, type: 'Single', coverImage: s.coverImage }));
+        break;
+      }
       case 'Best Pop Duo/Group Performance': {
         const pSub = getSubmittedWork('Best Pop Duo/Group Performance', 'Single');
         if (pSub) pool.push(pSub);
         npcSingles.filter(s => {
-           // Assume ~30% of NPC singles are collabs to give some competition
-           return (s.id.charCodeAt(0) % 3) === 0;
+           const song: any = s;
+           const isCollab = !!song.collaborator || !!song.featuredArtistCost || !!song.isNPCCollab || /feat\./i.test(s.title || '') || /&/.test(song.artist || '');
+           const npc = NPC_ARTISTS.find(n => n.name === s.artist);
+           return npc?.type === 'Pop' && isCollab;
         }).forEach(s => {
-           const collabNPC = NPC_ARTISTS.find(n => n.name !== s.artist);
-           pool.push({ id: s.id, title: s.title, artist: s.artist + (collabNPC ? ` & ${collabNPC.name}` : ''), isPlayer: false, type: 'Single', coverImage: s.coverImage });
+           pool.push({ id: s.id, title: s.title, artist: s.artist, isPlayer: false, type: 'Single', coverImage: s.coverImage });
         });
+        break;
+      }
+      case 'Best K-Pop Performance': {
+        const pSub = getSubmittedWork('Best K-Pop Performance', 'Single');
+        if (pSub) pool.push(pSub);
+        npcSingles.filter(s => {
+           const npc = NPC_ARTISTS.find(n => n.name === s.artist);
+           return npc?.type === 'Kpop';
+        }).forEach(s => pool.push({ id: s.id, title: s.title, artist: s.artist, isPlayer: false, type: 'Single', coverImage: s.coverImage }));
+        break;
+      }
+      case 'Best Rap Song': {
+        const pSub = getSubmittedWork('Best Rap Song', 'Single');
+        if (pSub) pool.push(pSub);
+        npcSingles.filter(s => {
+           const npc = NPC_ARTISTS.find(n => n.name === s.artist);
+           return npc?.type === 'Rap';
+        }).forEach(s => pool.push({ id: s.id, title: s.title, artist: s.artist, isPlayer: false, type: 'Single', coverImage: s.coverImage }));
+        break;
+      }
+      case 'Best Country Song': {
+        const pSub = getSubmittedWork('Best Country Song', 'Single');
+        if (pSub) pool.push(pSub);
+        npcSingles.filter(s => {
+           const npc = NPC_ARTISTS.find(n => n.name === s.artist);
+           return npc?.type === 'Country';
+        }).forEach(s => pool.push({ id: s.id, title: s.title, artist: s.artist, isPlayer: false, type: 'Single', coverImage: s.coverImage }));
         break;
       }
       case 'Best Pop Album': {
@@ -124,12 +168,12 @@ export function generateNominees(gameState: GameState, year: number): GrammysCat
        if (nom.isPlayer) {
           const release = gameState.releases.find(r => r?.id === nom.id);
           if (nom.type === 'Artist') {
-             return gameState.stats.streams / 3000000 + (gameState.artist?.level || 0) * 10;
+             return gameState.stats.streams / 500000 + (gameState.artist?.level || 0) * 15;
           }
           if (release) {
              const streams = typeof release.streams === 'number' ? release.streams : (release.streams as any).total;
              const quality = (release as any).qualityModifier || 5;
-             return (streams / 1200000) + Math.pow(quality, 1.8) * 6; // high quality > sheer streams
+             return (streams / 200000) + Math.pow(quality, 1.8) * 8; // high quality > sheer streams
           }
        } else {
           const npc = NPC_ARTISTS.find(n => n.name === nom.artist);
@@ -138,20 +182,104 @@ export function generateNominees(gameState: GameState, year: number): GrammysCat
           const npcItem = [...npcSingles, ...npcAlbums].find(i => i?.id === nom.id);
           const points = npcItem?.points || 100000;
           // Random quality for NPCs [7-11]
-          const quality = 7 + (nom.id.charCodeAt(0) % 5); 
-          return (points / 1000) + Math.pow(quality, 1.8) * 6.5; // match player scale roughly but favor npcs more to tighten
+          const quality = 7 + ((nom.id.charCodeAt(nom.id.length - 1) + nom.id.charCodeAt(0)) % 5); 
+          return (points / 1500) + Math.pow(quality, 1.8) * 6.5; // match player scale roughly but favor npcs more to tighten
        }
        return 0;
     };
 
     let scoredPool = pool.map(p => ({ ...p, score: getValuation(p) }));
     
-    // Enforce 1 max Player nomination per category
-    const playerNoms = scoredPool.filter(p => p.isPlayer).sort((a, b) => b.score - a.score);
-    if (playerNoms.length > 1) {
-       // Keep the first one, remove the rest from scoredPool
-       const disallowedIds = new Set(playerNoms.slice(1).map(p => p?.id));
-       scoredPool = scoredPool.filter(p => !disallowedIds.has(p.id));
+    // Enforce 1 max nomination per artist per category
+    scoredPool.sort((a, b) => b.score - a.score);
+    const seenArtists = new Set<string>();
+    scoredPool = scoredPool.filter(p => {
+       const key = p.isPlayer ? ('PLAYER_' + p.artist) : p.artist;
+       if (seenArtists.has(key)) return false;
+       seenArtists.add(key);
+       return true;
+    });
+
+    // Pad with fallback if not enough 
+    if (scoredPool.length < 5) {
+       const needed = 5 - scoredPool.length;
+       const categoryTypes: Record<string, string> = {
+           'Best Pop Solo Performance': 'Pop',
+           'Best Pop Duo/Group Performance': 'Pop',
+           'Best K-Pop Performance': 'Kpop',
+           'Best Rap Song': 'Rap',
+           'Best Rap Album': 'Rap',
+           'Best Country Song': 'Country',
+           'Best Country Album': 'Country',
+           'Best Pop Album': 'Pop'
+       };
+       const targetType = categoryTypes[category];
+       let fallbackNpcs = availableNpcs.filter(n => targetType ? n.type === targetType : true);
+       if (fallbackNpcs.length === 0) fallbackNpcs = availableNpcs; // Ultimate fallback
+       
+       // Shuffle fallbacks based on year to look different each year
+       fallbackNpcs = [...fallbackNpcs].sort((a, b) => {
+           const hashA = (a.name.charCodeAt(0) * a.name.charCodeAt(a.name.length - 1) + previousYear * 17) % 100;
+           const hashB = (b.name.charCodeAt(0) * b.name.charCodeAt(b.name.length - 1) + previousYear * 17) % 100;
+           return hashA - hashB;
+       });
+
+       let fallbackIndex = 0;
+       while (scoredPool.length < 5 && fallbackIndex < fallbackNpcs.length) {
+           const npc = fallbackNpcs[fallbackIndex];
+           const key = npc.name;
+           if (!seenArtists.has(key)) {
+               seenArtists.add(key);
+               const fakeId = `fake-${category}-${previousYear}-${fallbackIndex}`;
+               const type = category.includes('Album') ? 'Album' : category.includes('Artist') ? 'Artist' : 'Single';
+               
+               let genTitle = type === 'Artist' ? npc.name : `${npc.name} Hit ${previousYear}`;
+               
+               if (type !== 'Artist') {
+                   const genericSongs = ["Midnight", "Hold On", "Never Let Go", "City Lights", "Sunset", "Echoes", "Fading Away", "Better Days", "Lost In You", "Runaway", "Silent Whisper", "Dreams", "Euphoria", "Chasing Stars", "Nostalgia", "Desire", "Breathe", "Awake", "Gravity", "Illusions"];
+                   const genericAlbums = ["The Journey", "Evolution", "Midnight Sessions", "Echoes of Time", "Horizons", "Rebirth", "Golden Hour", "Neon Lights", "Into the Wild", "Silent Storm", "Unplugged", "Daydreams", "Nocturne", "Vibrations", "The Aftermath", "Ascension", "Odyssey", "Mirage", "Prism", "Legacy"];
+                   
+                   const titleHash = (npc.name.charCodeAt(0) * 17 + previousYear * 31 + fallbackIndex) % 20;
+                   if (type === 'Album') genTitle = genericAlbums[titleHash];
+                   else genTitle = genericSongs[titleHash];
+               }
+               
+               let genArtist = npc.name;
+               let coverImage: string | undefined = undefined;
+               
+               const disco = ARTIST_DISCOGRAPHY[npc.name];
+               if (disco) {
+                  if (type === 'Album' && disco.albums && disco.albums.length > 0) {
+                     const randIdx = (previousYear * 37 + fallbackIndex) % disco.albums.length;
+                     const album = disco.albums[randIdx];
+                     genTitle = album.title;
+                     coverImage = album.cover;
+                  } else if (type === 'Single' && disco.tracks && disco.tracks.length > 0) {
+                     const randIdx = (previousYear * 37 + fallbackIndex) % disco.tracks.length;
+                     const track = disco.tracks[randIdx];
+                     genTitle = track.title;
+                     coverImage = track.cover;
+                  }
+               }
+               
+               if (category === 'Best Pop Duo/Group Performance') {
+                   const partnerOffset = (fallbackIndex + 1) % fallbackNpcs.length;
+                   const partner = fallbackNpcs[partnerOffset];
+                   genArtist = `${npc.name} & ${partner.name}`;
+               }
+
+               scoredPool.push({
+                   id: fakeId,
+                   artist: genArtist,
+                   title: genTitle,
+                   isPlayer: false,
+                   type: type as any,
+                   score: Math.random() * 20 + 20,
+                   coverImage
+               });
+           }
+           fallbackIndex++;
+       }
     }
 
     const nominees = scoredPool
@@ -178,12 +306,12 @@ export function pickWinner(categoryResult: GrammysCategoryResult, gameState: Gam
      if (nom.isPlayer) {
         const release = gameState.releases.find(r => r?.id === nom.id);
         if (nom.type === 'Artist') {
-           score = (gameState.stats.streams / 75000000) + (gameState.artist?.level || 0) * 8;
+           score = (gameState.stats.streams / 5000000) + (gameState.artist?.level || 0) * 12;
         } else if (release) {
            const streams = typeof release.streams === 'number' ? release.streams : (release.streams as any).total;
            const quality = (release as any).qualityModifier || 5;
            // Quality provides exponential benefits, but require massive streams or perfect quality
-           score = (streams / 5500000) + Math.pow(quality, 2.0) * 2;
+           score = (streams / 500000) + Math.pow(quality, 2.0) * 3;
         }
      } else {
         const npc = NPC_ARTISTS.find(n => n.name === nom.artist);
@@ -193,13 +321,13 @@ export function pickWinner(categoryResult: GrammysCategoryResult, gameState: Gam
         } else {
            const points = base * 2.0; // Assume NPCs performed quite well
            const quality = 8 + (nom.id.charCodeAt(0) % 4); // 8 to 11
-           score = (points / 12000) + Math.pow(quality, 2.1) * 3;
+           score = (points / 15000) + Math.pow(quality, 2.1) * 3;
         }
      }
      
      // Add a bit of "jury randomness", make it sway a lot 
      // (so even mega hits can sometimes lose to highly praised jury darlings)
-     const juryRandom = (Math.random() * 50) - 5;
+     const juryRandom = (Math.random() * 60) - 10;
      return score + juryRandom;
   };
 
